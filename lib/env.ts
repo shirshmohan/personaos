@@ -10,11 +10,11 @@ const schema = z.object({
   AUTH_GOOGLE_ID: z.string().min(1),
   AUTH_GOOGLE_SECRET: z.string().min(1),
   OWNER_EMAIL: z.string().email(),
-  CLOUDINARY_CLOUD_NAME: z.string().optional(),
-  CLOUDINARY_API_KEY: z.string().optional(),
-  CLOUDINARY_API_SECRET: z.string().optional(),
-  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional().or(z.literal("")),
+  CLOUDINARY_API_KEY: z.string().min(1).optional().or(z.literal("")),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional().or(z.literal("")),
+  UPSTASH_REDIS_REST_URL: z.string().url().optional().or(z.literal("")),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional().or(z.literal("")),
 });
 
 export type Env = z.infer<typeof schema>;
