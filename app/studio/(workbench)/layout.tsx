@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { StudioSidebar } from "@/components/studio/studio-sidebar";
+import { SignOutButton } from "@/components/studio/sign-out-button";
 
 /**
  * Defence in depth: middleware gates the route at the edge, and this server
@@ -13,16 +16,29 @@ export default async function StudioLayout({
   if (!session?.user) redirect("/studio/sign-in");
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-5xl flex-col px-(--spacing-gutter)">
-      <header className="flex items-center justify-between border-b border-(--color-border) py-6">
-        <span className="font-(family-name:--font-display) text-sm font-medium tracking-tight">
+    <div className="min-h-dvh">
+      <header className="flex items-center justify-between border-b border-(--color-border) px-(--spacing-gutter) py-4">
+        <Link
+          href="/studio"
+          className="font-(family-name:--font-display) text-lg tracking-tight"
+        >
           Studio
-        </span>
-        <span className="text-sm text-(--color-ink-muted)">
-          {session.user.email}
-        </span>
+        </Link>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-sm text-(--color-ink-muted) sm:inline">
+            {session.user.email}
+          </span>
+          <SignOutButton />
+        </div>
       </header>
-      <main className="flex-1 py-12">{children}</main>
+
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-(--spacing-gutter) py-8 md:flex-row md:gap-12">
+        {/* Collapses above the content on mobile rather than hiding behind a drawer. */}
+        <aside className="md:w-52 md:shrink-0">
+          <StudioSidebar />
+        </aside>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }

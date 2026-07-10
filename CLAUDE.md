@@ -181,7 +181,7 @@ The Studio is the private control plane and **the source of truth** (Rule 7).
 
 Inspiration: **Apple × Linear × Notion.** Keywords: *quiet confidence, typography-first, restrained motion, premium spacing* (per `05_DESIGN_SYSTEM`).
 
-- Typography carries the design; color is restrained.
+- **Display face: Instrument Serif** (D15) — used above ~18px only, never for body. Body and UI use a neutral system sans. Type carries the page; color stays restrained.
 - Motion is subtle and purposeful — never decorative noise.
 - Generous whitespace; let pages breathe.
 - **No social metrics rendered anywhere** (Rule 9).

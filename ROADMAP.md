@@ -6,7 +6,7 @@ Every milestone must **deploy to a live URL** to count as done.
 
 ---
 
-## M1 — Foundation
+## M1 — Foundation ✅ *shipped*
 Scaffold the project and wire the stack end-to-end.
 - Next.js (App Router) + TS strict, Tailwind, shadcn/ui, ESLint/Prettier
 - Auth.js with **Google OAuth** + owner allowlist gating `/studio`
@@ -15,7 +15,7 @@ Scaffold the project and wire the stack end-to-end.
 - App shell: root layout, design tokens, public route group + protected `/studio` placeholder
 - **DoD:** clean build/typecheck, `dev` renders the shell, migrations run against real Postgres, `.env.example` documented, deploys to Vercel.
 
-## M2 — Studio Shell
+## M2 — Studio Shell ✅ *code complete, awaiting your deploy*
 The protected CMS frame — no editing yet.
 - `/studio` layout, navigation, auth gate, empty states, Workbench skeleton
 - **Depends on:** M1. **DoD:** logged-in owner sees the shell live; nobody else can.

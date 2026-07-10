@@ -1,17 +1,85 @@
+import Link from "next/link";
+import { FileText, Clock } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
+import { EntityList } from "@/components/shared/entity-list";
+import { EntityTypeIcon } from "@/components/shared/entity-type-icon";
+import {
+  getDrafts,
+  getEntityCounts,
+  getRecentlyEdited,
+} from "@/features/entities/queries";
+import { ENTITY_TYPES, ENTITY_TYPE_META } from "@/features/entities/types";
+
 export const metadata = { title: "Workbench" };
 
-export default function StudioPage() {
+export default async function WorkbenchPage() {
+  const [drafts, recent, counts] = await Promise.all([
+    getDrafts(),
+    getRecentlyEdited(),
+    getEntityCounts(),
+  ]);
+
   return (
-    <section>
-      <h1 className="font-(family-name:--font-display) text-2xl font-medium tracking-tight">
-        Workbench
-      </h1>
-      {/* An empty screen is an invitation to act. The Shell lands in M2. */}
-      <p className="mt-3 max-w-md text-sm leading-relaxed text-(--color-ink-muted)">
-        Nothing here yet. The Studio shell arrives in Milestone 2, and the
-        Universal Editor in Milestone 3. The foundation is live — auth,
-        database, and media are wired.
-      </p>
-    </section>
+    <>
+      <PageHeader
+        title="Workbench"
+        description="Everything in progress, and everything already made."
+      />
+
+      <section className="mb-12">
+        <h2 className="mb-3 text-sm font-medium">Drafts</h2>
+        {drafts.length > 0 ? (
+          <EntityList entities={drafts} />
+        ) : (
+          <EmptyState
+            icon={FileText}
+            title="No drafts. Nothing is waiting on you."
+          />
+        )}
+      </section>
+
+      <section className="mb-12">
+        <h2 className="mb-3 text-sm font-medium">Recently edited</h2>
+        {recent.length > 0 ? (
+          <EntityList entities={recent} />
+        ) : (
+          <EmptyState
+            icon={Clock}
+            title="Nothing written yet. The editor arrives in Milestone 3."
+          />
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-medium">All entities</h2>
+        <ul className="grid gap-px overflow-hidden rounded-lg border border-(--color-border) bg-(--color-border) sm:grid-cols-2 lg:grid-cols-3">
+          {ENTITY_TYPES.map((type) => (
+            <li key={type} className="bg-(--color-surface)">
+              <Link
+                href={`/studio/${type}`}
+                className="flex h-full flex-col gap-1 p-4 transition-colors duration-150 ease-(--ease-quiet) hover:bg-(--color-surface-sunken)"
+              >
+                <div className="flex items-center gap-2">
+                  <EntityTypeIcon
+                    type={type}
+                    className="text-(--color-ink-muted)"
+                  />
+                  <span className="text-sm font-medium">
+                    {ENTITY_TYPE_META[type].label}
+                  </span>
+                  <span className="ml-auto font-(family-name:--font-display) text-lg text-(--color-ink-muted) tabular-nums">
+                    {counts[type] ?? 0}
+                  </span>
+                </div>
+                <p className="text-xs leading-relaxed text-(--color-ink-muted)">
+                  {ENTITY_TYPE_META[type].blurb}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
   );
 }

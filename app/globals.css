@@ -4,9 +4,10 @@
  * Design tokens — Apple × Linear × Notion.
  * Quiet confidence, typography-first, restrained motion, premium spacing.
  *
- * M1 note: the typeface *slot* is defined; the actual display face is a
- * taste decision for Shirsh (see CLAUDE.md §9). Until then, a high-quality
- * system stack — fast, no layout shift, no network dependency.
+ * Display: Instrument Serif (D15). A serif with real personality in the
+ * display slot, paired with a neutral system sans for body — so the type
+ * carries the page without shouting. Instrument Serif is never used below
+ * ~18px; it is a voice, not a workhorse.
  */
 @theme {
   /* Ink & surface. Cool neutrals, not warm cream. */
@@ -18,7 +19,7 @@
   /* One restrained accent. Used sparingly — never as decoration. */
   --color-accent: oklch(52% 0.135 258);
 
-  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
   --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
 

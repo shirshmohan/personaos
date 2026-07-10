@@ -1,8 +1,7 @@
 import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-// drizzle-kit runs outside Next.js, which means .env.local
-// is not loaded for us. Load it explicitly.
+// drizzle-kit runs outside Next.js, which does not load .env.local for us.
 config({ path: ".env.local" });
 
 export default defineConfig({

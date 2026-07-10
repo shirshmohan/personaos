@@ -24,6 +24,9 @@ These are settled. Changing one requires a new dated entry in the log below with
 | D12 | **Single `entities` table** with `type` discriminator + JSONB `metadata` | One model, one editor (D2); avoids per-type table sprawl |
 | D13 | **`pnpm`** as package manager | Fast, disk-efficient, reversible |
 | D14 | **M1 includes a minimal schema**: auth tables + stub `entities`; expanded at M4 | Proves migrations run end-to-end before building on them |
+| D15 | **Display typeface: Instrument Serif** (one weight, display only, never body copy) | Typography-first per §9; a voice, not a workhorse |
+| D16 | **Studio is a sidebar over entity types**, not a menu of features | Rule 6 — the entity model *is* the navigation |
+| D17 | **Runs entirely on free tiers.** Vercel Hobby is non-commercial only; ads, affiliate links, or client work trigger Pro ($20/mo) | Verified July 2026; free tiers pause rather than bill, so no surprise charges |
 
 ---
 
@@ -61,4 +64,7 @@ Append new entries here. Format: date · decision · rationale · status.
 
 - _2026-07-04 · Consolidated 14 skeletal docs into 4 working files (README, CLAUDE, DECISIONS, ROADMAP) · one strong handbook beats many stubs; solves the context-window problem · **Adopted**._
 - _2026-07-10 · Resolved O1–O5 → D10–D14: Google-only OAuth (no GitHub); Train = DSA log; single-table entities; pnpm; minimal schema in M1 · **Adopted**._
+- _2026-07-10 · M1 corrections: `dotenv` added so `drizzle.config.ts` loads `.env.local`; optional env vars accept `""`; unused Cloudinary/Upstash vars omitted rather than blanked · both bugs surfaced only on a real machine, not in the sandbox · **Adopted**._
+- _2026-07-10 · M1 shipped and verified in production: owner admitted, non-owner refused, session survives refresh · **Done**._
+- _2026-07-10 · D15–D17 adopted. Instrument Serif chosen by Shirsh; sidebar-over-entity-types approved · **Adopted**._
 - _(next entry…)_

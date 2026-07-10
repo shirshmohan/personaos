@@ -32,8 +32,13 @@ cp .env.example .env.local
 npx auth secret        # generates AUTH_SECRET
 ```
 Fill `DATABASE_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and set
-`OWNER_EMAIL` to the Google account that owns the Studio. Cloudinary and
-Upstash keys are optional in M1 — the code tolerates them being blank.
+`OWNER_EMAIL` to the Google account that owns the Studio.
+
+**Delete the Cloudinary and Upstash lines entirely.** They aren't used until
+M3. An *empty* value (`UPSTASH_REDIS_REST_URL=""`) is worse than an absent one:
+Node sets the key to `""`, so Zod's `.optional()` never fires and `.url()`
+rejects the empty string. Absent keys pass cleanly. Same rule applies to the
+Vercel environment variables in Step 6 — set exactly five, no blanks.
 
 ### Step 5 — Create the tables and run it
 ```bash
@@ -81,8 +86,12 @@ isn't `OWNER_EMAIL` *and* verified — so a stranger never gets a session at all
 - ✅ `drizzle-kit migrate` **against a real PostgreSQL 16** — applied successfully.
 - ✅ Verified `entity` defaults (`status='draft'`, `metadata='{}'`) and that the
   unique slug index **rejects duplicate slugs**.
-- ⬜ **Not verified: the live deploy and a real Google sign-in.** I can't create
-  your Neon/Google/Vercel accounts. Steps 2–6 are yours.
+- ✅ **Live on Vercel.** Google OAuth completes, the Workbench renders, the Neon
+  session survives a serverless round-trip, and the session survives a refresh
+  (confirms `AUTH_SECRET` is set in production).
+- ⬜ **Non-owner rejection, verified in incognito.** Until a *second* Google
+  account is refused at `/studio`, the allowlist is unproven. The owner getting
+  in proves nothing about anyone else being kept out.
 
 ---
 
@@ -93,6 +102,26 @@ isn't `OWNER_EMAIL` *and* verified — so a stranger never gets a session at all
 unauthenticated visitor → redirect to sign-in → layout redirects to sign-in →
 infinite loop. Fixed with a `(workbench)` route group so the gate wraps the
 Workbench but not sign-in.
+
+**Two bugs my verification missed — found only when a human ran the steps.**
+Both are corrected above, and both are the same failure of method: I exported
+env vars directly into my shell rather than creating a real `.env.local`, so
+neither path was ever exercised.
+
+1. **`drizzle.config.ts` never loaded `.env.local`.** `drizzle-kit` runs as a
+   standalone Node script, outside Next.js, and Node does not auto-load that
+   file — Next.js does. `pnpm db:migrate` failed with `url: undefined` while
+   `pnpm dev` worked fine. Fix: `pnpm add -D dotenv`, then
+   `config({ path: ".env.local" })` before `defineConfig`.
+2. **Empty optional env vars crashed the app.** `.env.example` shipped
+   `UPSTASH_REDIS_REST_URL=""`. Copied to `.env.local`, that key *exists* with
+   an empty value, so `.optional()` is bypassed and `.url()` throws. My
+   self-review claimed "the code tolerates them being blank." It did not.
+   Fix: `.or(z.literal(""))` on each optional in `lib/env.ts`, and delete the
+   unused lines from `.env.local` and Vercel.
+
+**Lesson for M2:** verify against a real `.env.local`, not an exported shell
+environment. A green build in a sandbox is not a green build.
 
 **Two deviations from the original plan, both deliberate:**
 1. Added `pg` as a dev dependency. `drizzle-kit` auto-detected the Neon serverless
