@@ -1,0 +1,2558 @@
+From 625903d41bd9273c4f94d29a5206c86d0fa3c359 Mon Sep 17 00:00:00 2001
+From: claude <c@a.co>
+Date: Fri, 10 Jul 2026 02:39:18 +0000
+Subject: [PATCH] M3: Universal Editor
+
+---
+ .gitignore                                    |   1 +
+ app/studio/(workbench)/[type]/[slug]/page.tsx |  45 ++
+ app/studio/(workbench)/[type]/new/page.tsx    |  31 ++
+ app/studio/(workbench)/[type]/page.tsx        |  18 +-
+ components/studio/block-editor.tsx            | 149 ++++++
+ components/studio/entity-form.tsx             | 172 +++++++
+ components/ui/button.tsx                      |  23 +-
+ components/ui/input.tsx                       |  14 +
+ components/ui/label.tsx                       |  11 +
+ components/ui/select.tsx                      |  14 +
+ components/ui/textarea.tsx                    |  14 +
+ db/0001_jazzy_mercury.sql                     |  16 +
+ db/meta/0001_snapshot.json                    | 465 ++++++++++++++++++
+ db/meta/_journal.json                         |   7 +
+ features/entities/actions.ts                  |  94 ++++
+ features/entities/blocks.ts                   |  79 +++
+ features/entities/queries.ts                  |  17 +-
+ features/entities/schemas.ts                  |  97 ++++
+ features/entities/slug.ts                     |  12 +
+ lib/auth/guard.ts                             |  17 +
+ lib/cloudinary/sign.ts                        |  29 ++
+ lib/cloudinary/signature.ts                   |  19 +
+ lib/db/schema.ts                              |  31 +-
+ package.json                                  |   1 +
+ pnpm-lock.yaml                                | 297 ++++++++++-
+ tests/blocks.test.ts                          |  45 ++
+ tests/cloudinary-sign.test.ts                 |  22 +
+ tests/entity-schema.test.ts                   |  48 ++
+ tests/owner-guard.test.ts                     |  51 ++
+ tests/slug.test.ts                            |  27 +
+ 30 files changed, 1845 insertions(+), 21 deletions(-)
+ create mode 100644 app/studio/(workbench)/[type]/[slug]/page.tsx
+ create mode 100644 app/studio/(workbench)/[type]/new/page.tsx
+ create mode 100644 components/studio/block-editor.tsx
+ create mode 100644 components/studio/entity-form.tsx
+ create mode 100644 components/ui/input.tsx
+ create mode 100644 components/ui/label.tsx
+ create mode 100644 components/ui/select.tsx
+ create mode 100644 components/ui/textarea.tsx
+ create mode 100644 db/0001_jazzy_mercury.sql
+ create mode 100644 db/meta/0001_snapshot.json
+ create mode 100644 features/entities/actions.ts
+ create mode 100644 features/entities/blocks.ts
+ create mode 100644 features/entities/schemas.ts
+ create mode 100644 features/entities/slug.ts
+ create mode 100644 lib/auth/guard.ts
+ create mode 100644 lib/cloudinary/sign.ts
+ create mode 100644 lib/cloudinary/signature.ts
+ create mode 100644 tests/blocks.test.ts
+ create mode 100644 tests/cloudinary-sign.test.ts
+ create mode 100644 tests/entity-schema.test.ts
+ create mode 100644 tests/owner-guard.test.ts
+ create mode 100644 tests/slug.test.ts
+
+diff --git a/.gitignore b/.gitignore
+index 918c87e..36f9ba9 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,3 +5,4 @@ node_modules
+ .DS_Store
+ *.tsbuildinfo
+ next-env.d.ts
++.env.local
+diff --git a/app/studio/(workbench)/[type]/[slug]/page.tsx b/app/studio/(workbench)/[type]/[slug]/page.tsx
+new file mode 100644
+index 0000000..369d762
+--- /dev/null
++++ b/app/studio/(workbench)/[type]/[slug]/page.tsx
+@@ -0,0 +1,45 @@
++import { notFound } from "next/navigation";
++import { PageHeader } from "@/components/shared/page-header";
++import { EntityForm } from "@/components/studio/entity-form";
++import { getEntityBySlug } from "@/features/entities/queries";
++import { isEntityType } from "@/features/entities/types";
++import { bodySchema } from "@/features/entities/blocks";
++
++export default async function EditEntityPage({
++  params,
++}: {
++  params: Promise<{ type: string; slug: string }>;
++}) {
++  const { type, slug } = await params;
++  if (!isEntityType(type)) notFound();
++
++  const entity = await getEntityBySlug(type, slug);
++  if (!entity) notFound();
++
++  // Body is jsonb — trust nothing that came out of a JSONB column.
++  const body = bodySchema.safeParse(entity.body);
++
++  return (
++    <>
++      <PageHeader
++        title={entity.title}
++        description={entity.status === "draft" ? "Draft" : "Published"}
++      />
++      <EntityForm
++        initial={{
++          id: entity.id,
++          type,
++          title: entity.title,
++          slug: entity.slug,
++          summary: entity.summary ?? "",
++          status: entity.status,
++          body: body.success ? body.data : [],
++          occurredAt: entity.occurredAt
++            ? entity.occurredAt.toISOString().slice(0, 10)
++            : "",
++          metadata: (entity.metadata ?? {}) as Record<string, unknown>,
++        }}
++      />
++    </>
++  );
++}
+diff --git a/app/studio/(workbench)/[type]/new/page.tsx b/app/studio/(workbench)/[type]/new/page.tsx
+new file mode 100644
+index 0000000..5878a4e
+--- /dev/null
++++ b/app/studio/(workbench)/[type]/new/page.tsx
+@@ -0,0 +1,31 @@
++import { notFound } from "next/navigation";
++import { PageHeader } from "@/components/shared/page-header";
++import { EntityForm } from "@/components/studio/entity-form";
++import { ENTITY_TYPE_META, isEntityType } from "@/features/entities/types";
++
++export default async function NewEntityPage({
++  params,
++}: {
++  params: Promise<{ type: string }>;
++}) {
++  const { type } = await params;
++  if (!isEntityType(type)) notFound();
++
++  return (
++    <>
++      <PageHeader title={`New ${ENTITY_TYPE_META[type].label.toLowerCase()}`} />
++      <EntityForm
++        initial={{
++          type,
++          title: "",
++          slug: "",
++          summary: "",
++          status: "draft",
++          body: [],
++          occurredAt: "",
++          metadata: {},
++        }}
++      />
++    </>
++  );
++}
+diff --git a/app/studio/(workbench)/[type]/page.tsx b/app/studio/(workbench)/[type]/page.tsx
+index 67fe361..3060e43 100644
+--- a/app/studio/(workbench)/[type]/page.tsx
++++ b/app/studio/(workbench)/[type]/page.tsx
+@@ -1,8 +1,10 @@
++import Link from "next/link";
+ import { notFound } from "next/navigation";
+ import { PageHeader } from "@/components/shared/page-header";
+ import { EmptyState } from "@/components/shared/empty-state";
+ import { EntityList } from "@/components/shared/entity-list";
+ import { listEntitiesByType } from "@/features/entities/queries";
++import { Button } from "@/components/ui/button";
+ import {
+   ENTITY_TYPES,
+   ENTITY_TYPE_META,
+@@ -36,15 +38,27 @@ export default async function EntityTypePage({
+   const meta = ENTITY_TYPE_META[type];
+   const items = await listEntitiesByType(type);
+ 
++  const newHref = `/studio/${type}/new`;
++
+   return (
+     <>
+-      <PageHeader title={meta.label} description={meta.blurb} />
++      <div className="flex items-start justify-between gap-4">
++        <PageHeader title={meta.label} description={meta.blurb} />
++        <Button asChild size="sm">
++          <Link href={newHref}>New</Link>
++        </Button>
++      </div>
+       {items.length > 0 ? (
+         <EntityList entities={items} />
+       ) : (
+         <EmptyState
+           icon={meta.icon}
+-          title={`No ${meta.label.toLowerCase()} entries yet. The editor arrives in Milestone 3.`}
++          title={`No ${meta.label.toLowerCase()} entries yet.`}
++          action={
++            <Button asChild size="sm" variant="outline">
++              <Link href={newHref}>Create the first one</Link>
++            </Button>
++          }
+         />
+       )}
+     </>
+diff --git a/components/studio/block-editor.tsx b/components/studio/block-editor.tsx
+new file mode 100644
+index 0000000..49af5be
+--- /dev/null
++++ b/components/studio/block-editor.tsx
+@@ -0,0 +1,149 @@
++"use client";
++
++import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
++import {
++  BLOCK_LABELS,
++  newBlock,
++  type Block,
++  type BlockType,
++} from "@/features/entities/blocks";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { Textarea } from "@/components/ui/textarea";
++
++const ORDER: BlockType[] = ["paragraph", "heading", "quote", "code", "image", "divider"];
++
++export function BlockEditor({
++  blocks,
++  onChange,
++}: {
++  blocks: Block[];
++  onChange: (blocks: Block[]) => void;
++}) {
++  const update = (id: string, patch: Partial<Block>) =>
++    onChange(
++      blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as Block) : b)),
++    );
++
++  const move = (index: number, delta: number) => {
++    const next = [...blocks];
++    const target = index + delta;
++    if (target < 0 || target >= next.length) return;
++    [next[index], next[target]] = [next[target], next[index]];
++    onChange(next);
++  };
++
++  return (
++    <div className="flex flex-col gap-3">
++      {blocks.map((block, i) => (
++        <div
++          key={block.id}
++          className="group rounded-md border border-(--color-border) p-3"
++        >
++          <div className="mb-2 flex items-center gap-2">
++            <span className="text-xs text-(--color-ink-muted)">
++              {BLOCK_LABELS[block.type]}
++            </span>
++            <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
++              <Button type="button" variant="ghost" size="sm" aria-label="Move up" onClick={() => move(i, -1)}>
++                <ArrowUp className="size-3.5" />
++              </Button>
++              <Button type="button" variant="ghost" size="sm" aria-label="Move down" onClick={() => move(i, 1)}>
++                <ArrowDown className="size-3.5" />
++              </Button>
++              <Button
++                type="button"
++                variant="ghost"
++                size="sm"
++                aria-label="Delete block"
++                onClick={() => onChange(blocks.filter((b) => b.id !== block.id))}
++              >
++                <Trash2 className="size-3.5" />
++              </Button>
++            </div>
++          </div>
++
++          {block.type === "paragraph" || block.type === "quote" ? (
++            <Textarea
++              rows={3}
++              value={block.text}
++              placeholder={block.type === "quote" ? "Quoted text…" : "Write…"}
++              onChange={(e) => update(block.id, { text: e.target.value })}
++            />
++          ) : null}
++
++          {block.type === "heading" ? (
++            <div className="flex gap-2">
++              <select
++                aria-label="Heading level"
++                className="h-10 rounded-md border border-(--color-border) bg-(--color-surface) px-2 text-sm"
++                value={block.level}
++                onChange={(e) =>
++                  update(block.id, { level: Number(e.target.value) as 2 | 3 })
++                }
++              >
++                <option value={2}>H2</option>
++                <option value={3}>H3</option>
++              </select>
++              <Input
++                value={block.text}
++                placeholder="Heading"
++                onChange={(e) => update(block.id, { text: e.target.value })}
++              />
++            </div>
++          ) : null}
++
++          {block.type === "code" ? (
++            <div className="flex flex-col gap-2">
++              <Input
++                value={block.language}
++                placeholder="Language"
++                onChange={(e) => update(block.id, { language: e.target.value })}
++              />
++              <Textarea
++                rows={5}
++                className="font-(family-name:--font-mono) text-xs"
++                value={block.code}
++                onChange={(e) => update(block.id, { code: e.target.value })}
++              />
++            </div>
++          ) : null}
++
++          {block.type === "image" ? (
++            <div className="flex flex-col gap-2">
++              <Input
++                value={block.url}
++                placeholder="https://res.cloudinary.com/…"
++                onChange={(e) => update(block.id, { url: e.target.value })}
++              />
++              {/* Required, not optional. An image without alt text is broken. */}
++              <Input
++                value={block.alt}
++                placeholder="Describe this image (required)"
++                onChange={(e) => update(block.id, { alt: e.target.value })}
++              />
++            </div>
++          ) : null}
++
++          {block.type === "divider" ? (
++            <hr className="border-(--color-border)" />
++          ) : null}
++        </div>
++      ))}
++
++      <div className="flex flex-wrap gap-1.5">
++        {ORDER.map((type) => (
++          <Button
++            key={type}
++            type="button"
++            variant="outline"
++            size="sm"
++            onClick={() => onChange([...blocks, newBlock(type)])}
++          >
++            + {BLOCK_LABELS[type]}
++          </Button>
++        ))}
++      </div>
++    </div>
++  );
++}
+diff --git a/components/studio/entity-form.tsx b/components/studio/entity-form.tsx
+new file mode 100644
+index 0000000..383a415
+--- /dev/null
++++ b/components/studio/entity-form.tsx
+@@ -0,0 +1,172 @@
++"use client";
++
++import { useState, useTransition } from "react";
++import { useRouter } from "next/navigation";
++import type { Block } from "@/features/entities/blocks";
++import { ENTITY_FIELDS } from "@/features/entities/schemas";
++import { slugify } from "@/features/entities/slug";
++import { saveEntity, archiveEntity } from "@/features/entities/actions";
++import type { EntityType } from "@/features/entities/types";
++import { BlockEditor } from "./block-editor";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import { Select } from "@/components/ui/select";
++import { Textarea } from "@/components/ui/textarea";
++
++export interface EntityFormValues {
++  id?: string;
++  type: EntityType;
++  title: string;
++  slug: string;
++  summary: string;
++  status: "draft" | "published" | "archived";
++  body: Block[];
++  occurredAt: string;
++  metadata: Record<string, unknown>;
++}
++
++function Field({ label, children }: { label: string; children: React.ReactNode }) {
++  return (
++    <label className="flex flex-col gap-1.5">
++      <Label>{label}</Label>
++      {children}
++    </label>
++  );
++}
++
++export function EntityForm({ initial }: { initial: EntityFormValues }) {
++  const router = useRouter();
++  const [pending, startTransition] = useTransition();
++  const [error, setError] = useState<string | null>(null);
++  const [v, setV] = useState(initial);
++  // Once the slug has been touched, stop deriving it from the title —
++  // silently rewriting a published URL is a bug, not a convenience.
++  const [slugLocked, setSlugLocked] = useState(Boolean(initial.id));
++
++  const set = <K extends keyof EntityFormValues>(k: K, value: EntityFormValues[K]) =>
++    setV((p) => ({ ...p, [k]: value }));
++
++  function submit(status: EntityFormValues["status"]) {
++    setError(null);
++    startTransition(async () => {
++      const result = await saveEntity({ ...v, status, coverMediaId: null });
++      if (!result.ok) {
++        setError(result.error);
++        return;
++      }
++      router.push(`/studio/${v.type}/${result.slug}`);
++      router.refresh();
++    });
++  }
++
++  return (
++    <div className="flex flex-col gap-8">
++      {error ? (
++        <p role="alert" className="rounded-md border border-(--color-border) bg-(--color-surface-sunken) px-3 py-2 text-sm">
++          {error}
++        </p>
++      ) : null}
++
++      <div className="grid gap-4 sm:grid-cols-2">
++        <div className="sm:col-span-2">
++          <Field label="Title">
++            <Input
++              value={v.title}
++              onChange={(e) => {
++                const title = e.target.value;
++                setV((p) => ({
++                  ...p,
++                  title,
++                  slug: slugLocked ? p.slug : slugify(title),
++                }));
++              }}
++            />
++          </Field>
++        </div>
++
++        <Field label="Slug">
++          <Input
++            value={v.slug}
++            onChange={(e) => {
++              setSlugLocked(true);
++              set("slug", slugify(e.target.value));
++            }}
++          />
++        </Field>
++
++        <Field label="Date">
++          <Input
++            type="date"
++            value={v.occurredAt}
++            onChange={(e) => set("occurredAt", e.target.value)}
++          />
++        </Field>
++
++        <div className="sm:col-span-2">
++          <Field label="Summary">
++            <Textarea
++              rows={2}
++              value={v.summary}
++              onChange={(e) => set("summary", e.target.value)}
++            />
++          </Field>
++        </div>
++
++        {/* Type-specific fields, rendered from the descriptors. */}
++        {ENTITY_FIELDS[v.type].map((f) => (
++          <Field key={f.name} label={f.label + (f.required ? " *" : "")}>
++            {f.kind === "select" ? (
++              <Select
++                value={String(v.metadata[f.name] ?? "")}
++                onChange={(e) =>
++                  set("metadata", { ...v.metadata, [f.name]: e.target.value })
++                }
++              >
++                <option value="">—</option>
++                {f.options?.map((o) => (
++                  <option key={o} value={o}>
++                    {o}
++                  </option>
++                ))}
++              </Select>
++            ) : (
++              <Input
++                type={f.kind === "date" ? "date" : f.kind === "url" ? "url" : "text"}
++                placeholder={f.placeholder}
++                value={String(v.metadata[f.name] ?? "")}
++                onChange={(e) =>
++                  set("metadata", { ...v.metadata, [f.name]: e.target.value })
++                }
++              />
++            )}
++          </Field>
++        ))}
++      </div>
++
++      <div>
++        <h2 className="mb-3 text-sm font-medium">Body</h2>
++        <BlockEditor blocks={v.body} onChange={(body) => set("body", body)} />
++      </div>
++
++      <div className="flex flex-wrap items-center gap-2 border-t border-(--color-border) pt-6">
++        <Button disabled={pending} onClick={() => submit("published")}>
++          {pending ? "Saving…" : "Publish"}
++        </Button>
++        <Button variant="outline" disabled={pending} onClick={() => submit("draft")}>
++          Save draft
++        </Button>
++        {v.id ? (
++          <form
++            className="ml-auto"
++            action={archiveEntity.bind(null, v.id, v.type)}
++          >
++            <Button type="submit" variant="ghost" size="sm">
++              Archive
++            </Button>
++          </form>
++        ) : null}
++      </div>
++    </div>
++  );
++}
+diff --git a/components/ui/button.tsx b/components/ui/button.tsx
+index a0dac63..a999308 100644
+--- a/components/ui/button.tsx
++++ b/components/ui/button.tsx
+@@ -25,15 +25,22 @@ const buttonVariants = cva(
+ 
+ export interface ButtonProps
+   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+-    VariantProps<typeof buttonVariants> {}
++    VariantProps<typeof buttonVariants> {
++  /** Render the child element with button styling (e.g. a Link). */
++  asChild?: boolean;
++}
++
++function Button({ className, variant, size, asChild, ...props }: ButtonProps) {
++  const classes = cn(buttonVariants({ variant, size, className }));
++
++  if (asChild && React.isValidElement(props.children)) {
++    const child = props.children as React.ReactElement<{ className?: string }>;
++    return React.cloneElement(child, {
++      className: cn(classes, child.props.className),
++    });
++  }
+ 
+-function Button({ className, variant, size, ...props }: ButtonProps) {
+-  return (
+-    <button
+-      className={cn(buttonVariants({ variant, size, className }))}
+-      {...props}
+-    />
+-  );
++  return <button className={classes} {...props} />;
+ }
+ 
+ export { Button, buttonVariants };
+diff --git a/components/ui/input.tsx b/components/ui/input.tsx
+new file mode 100644
+index 0000000..8dc943c
+--- /dev/null
++++ b/components/ui/input.tsx
+@@ -0,0 +1,14 @@
++import * as React from "react";
++import { cn } from "@/lib/utils";
++
++export function Input({ className, ...props }: React.ComponentProps<"input">) {
++  return (
++    <input
++      className={cn(
++        "flex h-10 w-full rounded-md border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm transition-colors duration-150 ease-(--ease-quiet) placeholder:text-(--color-ink-muted) disabled:opacity-50",
++        className,
++      )}
++      {...props}
++    />
++  );
++}
+diff --git a/components/ui/label.tsx b/components/ui/label.tsx
+new file mode 100644
+index 0000000..c679854
+--- /dev/null
++++ b/components/ui/label.tsx
+@@ -0,0 +1,11 @@
++import * as React from "react";
++import { cn } from "@/lib/utils";
++
++export function Label({ className, ...props }: React.ComponentProps<"label">) {
++  return (
++    <label
++      className={cn("text-xs font-medium text-(--color-ink-muted)", className)}
++      {...props}
++    />
++  );
++}
+diff --git a/components/ui/select.tsx b/components/ui/select.tsx
+new file mode 100644
+index 0000000..76a3b88
+--- /dev/null
++++ b/components/ui/select.tsx
+@@ -0,0 +1,14 @@
++import * as React from "react";
++import { cn } from "@/lib/utils";
++
++export function Select({ className, ...props }: React.ComponentProps<"select">) {
++  return (
++    <select
++      className={cn(
++        "flex h-10 w-full rounded-md border border-(--color-border) bg-(--color-surface) px-3 text-sm",
++        className,
++      )}
++      {...props}
++    />
++  );
++}
+diff --git a/components/ui/textarea.tsx b/components/ui/textarea.tsx
+new file mode 100644
+index 0000000..2553ec9
+--- /dev/null
++++ b/components/ui/textarea.tsx
+@@ -0,0 +1,14 @@
++import * as React from "react";
++import { cn } from "@/lib/utils";
++
++export function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
++  return (
++    <textarea
++      className={cn(
++        "flex w-full resize-y rounded-md border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm leading-relaxed placeholder:text-(--color-ink-muted)",
++        className,
++      )}
++      {...props}
++    />
++  );
++}
+diff --git a/db/0001_jazzy_mercury.sql b/db/0001_jazzy_mercury.sql
+new file mode 100644
+index 0000000..593575a
+--- /dev/null
++++ b/db/0001_jazzy_mercury.sql
+@@ -0,0 +1,16 @@
++CREATE TABLE "media" (
++	"id" text PRIMARY KEY NOT NULL,
++	"public_id" text NOT NULL,
++	"url" text NOT NULL,
++	"width" integer NOT NULL,
++	"height" integer NOT NULL,
++	"format" text NOT NULL,
++	"bytes" integer NOT NULL,
++	"alt" text DEFAULT '' NOT NULL,
++	"created_at" timestamp DEFAULT now() NOT NULL,
++	CONSTRAINT "media_public_id_unique" UNIQUE("public_id")
++);
++--> statement-breakpoint
++ALTER TABLE "entity" ADD COLUMN "body" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
++ALTER TABLE "entity" ADD COLUMN "cover_media_id" text;--> statement-breakpoint
++ALTER TABLE "entity" ADD CONSTRAINT "entity_cover_media_id_media_id_fk" FOREIGN KEY ("cover_media_id") REFERENCES "public"."media"("id") ON DELETE set null ON UPDATE no action;
+\ No newline at end of file
+diff --git a/db/meta/0001_snapshot.json b/db/meta/0001_snapshot.json
+new file mode 100644
+index 0000000..99b023b
+--- /dev/null
++++ b/db/meta/0001_snapshot.json
+@@ -0,0 +1,465 @@
++{
++  "id": "f86485e3-7a87-4e5c-999f-7c8aac3decca",
++  "prevId": "21aed685-c0be-40ad-8a95-b2e8e7da68c9",
++  "version": "7",
++  "dialect": "postgresql",
++  "tables": {
++    "public.account": {
++      "name": "account",
++      "schema": "",
++      "columns": {
++        "userId": {
++          "name": "userId",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "type": {
++          "name": "type",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "provider": {
++          "name": "provider",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "providerAccountId": {
++          "name": "providerAccountId",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "refresh_token": {
++          "name": "refresh_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "access_token": {
++          "name": "access_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "token_type": {
++          "name": "token_type",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "scope": {
++          "name": "scope",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "id_token": {
++          "name": "id_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "session_state": {
++          "name": "session_state",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "account_userId_user_id_fk": {
++          "name": "account_userId_user_id_fk",
++          "tableFrom": "account",
++          "tableTo": "user",
++          "columnsFrom": [
++            "userId"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {
++        "account_provider_providerAccountId_pk": {
++          "name": "account_provider_providerAccountId_pk",
++          "columns": [
++            "provider",
++            "providerAccountId"
++          ]
++        }
++      },
++      "uniqueConstraints": {},
++      "policies": {},
++      "checkConstraints": {},
++      "isRLSEnabled": false
++    },
++    "public.entity": {
++      "name": "entity",
++      "schema": "",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true
++        },
++        "type": {
++          "name": "type",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "slug": {
++          "name": "slug",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "title": {
++          "name": "title",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "summary": {
++          "name": "summary",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "'draft'"
++        },
++        "body": {
++          "name": "body",
++          "type": "jsonb",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "'[]'::jsonb"
++        },
++        "cover_media_id": {
++          "name": "cover_media_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "metadata": {
++          "name": "metadata",
++          "type": "jsonb",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "'{}'::jsonb"
++        },
++        "occurred_at": {
++          "name": "occurred_at",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "now()"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "now()"
++        }
++      },
++      "indexes": {
++        "entity_slug_idx": {
++          "name": "entity_slug_idx",
++          "columns": [
++            {
++              "expression": "slug",
++              "isExpression": false,
++              "asc": true,
++              "nulls": "last"
++            }
++          ],
++          "isUnique": true,
++          "concurrently": false,
++          "method": "btree",
++          "with": {}
++        },
++        "entity_type_status_idx": {
++          "name": "entity_type_status_idx",
++          "columns": [
++            {
++              "expression": "type",
++              "isExpression": false,
++              "asc": true,
++              "nulls": "last"
++            },
++            {
++              "expression": "status",
++              "isExpression": false,
++              "asc": true,
++              "nulls": "last"
++            }
++          ],
++          "isUnique": false,
++          "concurrently": false,
++          "method": "btree",
++          "with": {}
++        }
++      },
++      "foreignKeys": {
++        "entity_cover_media_id_media_id_fk": {
++          "name": "entity_cover_media_id_media_id_fk",
++          "tableFrom": "entity",
++          "tableTo": "media",
++          "columnsFrom": [
++            "cover_media_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "set null",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "policies": {},
++      "checkConstraints": {},
++      "isRLSEnabled": false
++    },
++    "public.media": {
++      "name": "media",
++      "schema": "",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true
++        },
++        "public_id": {
++          "name": "public_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "url": {
++          "name": "url",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "width": {
++          "name": "width",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "height": {
++          "name": "height",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "format": {
++          "name": "format",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "bytes": {
++          "name": "bytes",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "alt": {
++          "name": "alt",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "''"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": true,
++          "default": "now()"
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {
++        "media_public_id_unique": {
++          "name": "media_public_id_unique",
++          "nullsNotDistinct": false,
++          "columns": [
++            "public_id"
++          ]
++        }
++      },
++      "policies": {},
++      "checkConstraints": {},
++      "isRLSEnabled": false
++    },
++    "public.session": {
++      "name": "session",
++      "schema": "",
++      "columns": {
++        "sessionToken": {
++          "name": "sessionToken",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true
++        },
++        "userId": {
++          "name": "userId",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "expires": {
++          "name": "expires",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": true
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "session_userId_user_id_fk": {
++          "name": "session_userId_user_id_fk",
++          "tableFrom": "session",
++          "tableTo": "user",
++          "columnsFrom": [
++            "userId"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "policies": {},
++      "checkConstraints": {},
++      "isRLSEnabled": false
++    },
++    "public.user": {
++      "name": "user",
++      "schema": "",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true
++        },
++        "name": {
++          "name": "name",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "email": {
++          "name": "email",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "emailVerified": {
++          "name": "emailVerified",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": false
++        },
++        "image": {
++          "name": "image",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "policies": {},
++      "checkConstraints": {},
++      "isRLSEnabled": false
++    },
++    "public.verificationToken": {
++      "name": "verificationToken",
++      "schema": "",
++      "columns": {
++        "identifier": {
++          "name": "identifier",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "token": {
++          "name": "token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true
++        },
++        "expires": {
++          "name": "expires",
++          "type": "timestamp",
++          "primaryKey": false,
++          "notNull": true
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {},
++      "compositePrimaryKeys": {
++        "verificationToken_identifier_token_pk": {
++          "name": "verificationToken_identifier_token_pk",
++          "columns": [
++            "identifier",
++            "token"
++          ]
++        }
++      },
++      "uniqueConstraints": {},
++      "policies": {},
++      "checkConstraints": {},
++      "isRLSEnabled": false
++    }
++  },
++  "enums": {},
++  "schemas": {},
++  "sequences": {},
++  "roles": {},
++  "policies": {},
++  "views": {},
++  "_meta": {
++    "columns": {},
++    "schemas": {},
++    "tables": {}
++  }
++}
+\ No newline at end of file
+diff --git a/db/meta/_journal.json b/db/meta/_journal.json
+index 3efee0b..cc15e7a 100644
+--- a/db/meta/_journal.json
++++ b/db/meta/_journal.json
+@@ -8,6 +8,13 @@
+       "when": 1783636059018,
+       "tag": "0000_foamy_storm",
+       "breakpoints": true
++    },
++    {
++      "idx": 1,
++      "version": "7",
++      "when": 1783650827117,
++      "tag": "0001_jazzy_mercury",
++      "breakpoints": true
+     }
+   ]
+ }
+\ No newline at end of file
+diff --git a/features/entities/actions.ts b/features/entities/actions.ts
+new file mode 100644
+index 0000000..660f6f5
+--- /dev/null
++++ b/features/entities/actions.ts
+@@ -0,0 +1,94 @@
++"use server";
++
++import { revalidatePath } from "next/cache";
++import { redirect } from "next/navigation";
++import { and, eq, ne } from "drizzle-orm";
++import { db } from "@/lib/db";
++import { entities, media } from "@/lib/db/schema";
++import { requireOwner } from "@/lib/auth/guard";
++import { entityInputSchema, METADATA_SCHEMAS, type EntityInput } from "./schemas";
++import { pruneBlocks } from "./blocks";
++
++export type ActionResult =
++  | { ok: true; slug: string }
++  | { ok: false; error: string };
++
++async function slugTaken(slug: string, excludeId?: string) {
++  const rows = await db
++    .select({ id: entities.id })
++    .from(entities)
++    .where(
++      excludeId
++        ? and(eq(entities.slug, slug), ne(entities.id, excludeId))
++        : eq(entities.slug, slug),
++    )
++    .limit(1);
++  return rows.length > 0;
++}
++
++export async function saveEntity(input: EntityInput): Promise<ActionResult> {
++  await requireOwner();
++
++  const parsed = entityInputSchema.safeParse(input);
++  if (!parsed.success) {
++    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
++  }
++  const data = parsed.data;
++
++  const meta = METADATA_SCHEMAS[data.type].safeParse(data.metadata);
++  if (!meta.success) {
++    return { ok: false, error: meta.error.issues[0]?.message ?? "Invalid fields" };
++  }
++
++  // The DB index would reject this anyway; catching it here lets us say
++  // something kinder than "duplicate key violates unique constraint".
++  if (await slugTaken(data.slug, data.id)) {
++    return { ok: false, error: `The slug "${data.slug}" is already in use.` };
++  }
++
++  const values = {
++    type: data.type,
++    slug: data.slug,
++    title: data.title,
++    summary: data.summary || null,
++    status: data.status,
++    body: pruneBlocks(data.body),
++    coverMediaId: data.coverMediaId ?? null,
++    occurredAt: data.occurredAt ? new Date(data.occurredAt) : null,
++    metadata: meta.data as Record<string, unknown>,
++  };
++
++  if (data.id) {
++    await db.update(entities).set(values).where(eq(entities.id, data.id));
++  } else {
++    await db.insert(entities).values(values);
++  }
++
++  revalidatePath("/studio");
++  revalidatePath(`/studio/${data.type}`);
++  revalidatePath(`/studio/${data.type}/${data.slug}`);
++  return { ok: true, slug: data.slug };
++}
++
++/** Soft delete (D21). You will want this back. */
++export async function archiveEntity(id: string, type: string) {
++  await requireOwner();
++  await db.update(entities).set({ status: "archived" }).where(eq(entities.id, id));
++  revalidatePath("/studio");
++  revalidatePath(`/studio/${type}`);
++  redirect(`/studio/${type}`);
++}
++
++export async function registerMedia(input: {
++  publicId: string;
++  url: string;
++  width: number;
++  height: number;
++  format: string;
++  bytes: number;
++  alt: string;
++}) {
++  await requireOwner();
++  const [row] = await db.insert(media).values(input).returning();
++  return row;
++}
+diff --git a/features/entities/blocks.ts b/features/entities/blocks.ts
+new file mode 100644
+index 0000000..67ed50e
+--- /dev/null
++++ b/features/entities/blocks.ts
+@@ -0,0 +1,79 @@
++import { z } from "zod";
++
++/**
++ * Structured blocks, not markdown (D20). The cost is a real editor; the payoff
++ * is that M6's Atlas can walk the content tree to find relationships, and M5
++ * can render each block type with its own component. Markdown would force us
++ * to re-parse prose forever.
++ */
++export const blockSchema = z.discriminatedUnion("type", [
++  z.object({ id: z.string(), type: z.literal("paragraph"), text: z.string() }),
++  z.object({
++    id: z.string(),
++    type: z.literal("heading"),
++    level: z.union([z.literal(2), z.literal(3)]),
++    /** Empty while the author is still typing. Emptiness is a UI state, not
++     *  a validation error — blank blocks are dropped on save instead. */
++    text: z.string(),
++  }),
++  z.object({ id: z.string(), type: z.literal("quote"), text: z.string() }),
++  z.object({
++    id: z.string(),
++    type: z.literal("code"),
++    language: z.string().default("text"),
++    code: z.string(),
++  }),
++  z.object({
++    id: z.string(),
++    type: z.literal("image"),
++    mediaId: z.string().nullable(),
++    url: z.string().url(),
++    /** Required, never optional. Accessibility is a floor. */
++    alt: z.string(),
++  }),
++  z.object({ id: z.string(), type: z.literal("divider") }),
++]);
++
++export const bodySchema = z.array(blockSchema);
++
++export type Block = z.infer<typeof blockSchema>;
++export type BlockType = Block["type"];
++export type Body = z.infer<typeof bodySchema>;
++
++export const BLOCK_LABELS: Record<BlockType, string> = {
++  paragraph: "Text",
++  heading: "Heading",
++  quote: "Quote",
++  code: "Code",
++  image: "Image",
++  divider: "Divider",
++};
++
++export function newBlock(type: BlockType): Block {
++  const id = crypto.randomUUID();
++  switch (type) {
++    case "paragraph":
++      return { id, type, text: "" };
++    case "heading":
++      return { id, type, level: 2, text: "" };
++    case "quote":
++      return { id, type, text: "" };
++    case "code":
++      return { id, type, language: "text", code: "" };
++    case "image":
++      return { id, type, mediaId: null, url: "", alt: "" };
++    case "divider":
++      return { id, type };
++  }
++}
++
++/** Blank paragraphs/headings/quotes are noise. Drop them when persisting. */
++export function pruneBlocks(blocks: Body): Body {
++  return blocks.filter((b) => {
++    if (b.type === "paragraph" || b.type === "heading" || b.type === "quote")
++      return b.text.trim().length > 0;
++    if (b.type === "code") return b.code.trim().length > 0;
++    if (b.type === "image") return b.url.trim().length > 0;
++    return true;
++  });
++}
+diff --git a/features/entities/queries.ts b/features/entities/queries.ts
+index 04996a9..82c7c11 100644
+--- a/features/entities/queries.ts
++++ b/features/entities/queries.ts
+@@ -1,4 +1,4 @@
+-import { desc, eq, sql } from "drizzle-orm";
++import { and, desc, eq, ne, sql } from "drizzle-orm";
+ import { db } from "@/lib/db";
+ import { entities, type Entity, type EntityType } from "@/lib/db/schema";
+ 
+@@ -19,6 +19,7 @@ export async function getRecentlyEdited(
+   return db
+     .select()
+     .from(entities)
++    .where(ne(entities.status, "archived"))
+     .orderBy(desc(entities.updatedAt))
+     .limit(limit);
+ }
+@@ -37,6 +38,18 @@ export async function listEntitiesByType(type: EntityType): Promise<Entity[]> {
+   return db
+     .select()
+     .from(entities)
+-    .where(eq(entities.type, type))
++    .where(and(eq(entities.type, type), ne(entities.status, "archived")))
+     .orderBy(desc(entities.updatedAt));
+ }
++
++export async function getEntityBySlug(
++  type: EntityType,
++  slug: string,
++): Promise<Entity | undefined> {
++  const [row] = await db
++    .select()
++    .from(entities)
++    .where(and(eq(entities.type, type), eq(entities.slug, slug)))
++    .limit(1);
++  return row;
++}
+diff --git a/features/entities/schemas.ts b/features/entities/schemas.ts
+new file mode 100644
+index 0000000..e9f944d
+--- /dev/null
++++ b/features/entities/schemas.ts
+@@ -0,0 +1,97 @@
++import { z } from "zod";
++import { bodySchema } from "./blocks";
++import { ENTITY_STATUSES, type EntityType } from "@/lib/db/schema";
++
++/**
++ * Field descriptors are the single source of truth (Rule 5, applied to forms).
++ * The Zod validator and the rendered form are BOTH derived from this list, so
++ * they cannot drift. Add a field here and it appears in the editor, validated.
++ */
++export type FieldKind = "text" | "url" | "date" | "select";
++
++export interface FieldDef {
++  name: string;
++  label: string;
++  kind: FieldKind;
++  required?: boolean;
++  options?: readonly string[];
++  placeholder?: string;
++}
++
++export const ENTITY_FIELDS: Record<EntityType, readonly FieldDef[]> = {
++  career: [
++    { name: "employer", label: "Employer", kind: "text", required: true },
++    { name: "role", label: "Role", kind: "text", required: true },
++    { name: "location", label: "Location", kind: "text" },
++    { name: "endDate", label: "Ended", kind: "date" },
++  ],
++  writing: [
++    { name: "subtitle", label: "Subtitle", kind: "text" },
++    { name: "canonicalUrl", label: "Canonical URL", kind: "url" },
++  ],
++  travel: [
++    { name: "place", label: "Place", kind: "text", required: true },
++    { name: "country", label: "Country", kind: "text", required: true },
++  ],
++  train: [
++    { name: "source", label: "Source", kind: "select", options: ["LeetCode", "Codeforces", "Other"] },
++    { name: "problemUrl", label: "Problem URL", kind: "url" },
++    { name: "difficulty", label: "Difficulty", kind: "select", options: ["Easy", "Medium", "Hard"] },
++    { name: "pattern", label: "Pattern", kind: "text", placeholder: "Two pointers, DP…" },
++  ],
++  library: [
++    { name: "author", label: "Author", kind: "text", required: true },
++    { name: "readingStatus", label: "Status", kind: "select", options: ["Reading", "Finished", "Abandoned"] },
++  ],
++  gallery: [
++    { name: "medium", label: "Medium", kind: "text" },
++  ],
++};
++
++/** Build a Zod object from the descriptors. One definition, two consumers. */
++function zodForFields(fields: readonly FieldDef[]) {
++  const shape: Record<string, z.ZodTypeAny> = {};
++  for (const f of fields) {
++    let s: z.ZodTypeAny;
++    if (f.kind === "url") s = z.string().url();
++    else if (f.kind === "select" && f.options)
++      s = z.enum(f.options as [string, ...string[]]);
++    else s = z.string();
++
++    // Empty strings mean "not filled in", never a validation error.
++    shape[f.name] = f.required
++      ? z.string().min(1, `${f.label} is required`)
++      : s.optional().or(z.literal(""));
++  }
++  return z.object(shape);
++}
++
++export const METADATA_SCHEMAS = Object.fromEntries(
++  Object.entries(ENTITY_FIELDS).map(([type, fields]) => [type, zodForFields(fields)]),
++) as Record<EntityType, ReturnType<typeof zodForFields>>;
++
++/** What the editor submits. */
++export const entityInputSchema = z.object({
++  id: z.string().optional(),
++  type: z.enum(["career", "writing", "travel", "train", "library", "gallery"]),
++  title: z.string().min(1, "Title is required").max(200),
++  slug: z
++    .string()
++    .min(1, "Slug is required")
++    .regex(/^[a-z0-9-]+$/, "Lowercase letters, numbers, and hyphens only"),
++  summary: z.string().max(500).optional().or(z.literal("")),
++  status: z.enum(ENTITY_STATUSES),
++  body: bodySchema,
++  occurredAt: z.string().optional().or(z.literal("")),
++  coverMediaId: z.string().nullable().optional(),
++  metadata: z.record(z.string(), z.unknown()),
++});
++
++export type EntityInput = z.infer<typeof entityInputSchema>;
++
++/** Validate metadata against the schema for THIS type. */
++export function validateEntity(input: EntityInput) {
++  const base = entityInputSchema.safeParse(input);
++  if (!base.success) return base;
++  return METADATA_SCHEMAS[input.type].safeParse(input.metadata);
++}
+diff --git a/features/entities/slug.ts b/features/entities/slug.ts
+new file mode 100644
+index 0000000..653d8ee
+--- /dev/null
++++ b/features/entities/slug.ts
+@@ -0,0 +1,12 @@
++/** Deterministic, ASCII-safe, collision-prone by design — the DB enforces uniqueness. */
++export function slugify(input: string): string {
++  return input
++    .normalize("NFKD")
++    .replace(/[\u0300-\u036f]/g, "")
++    .toLowerCase()
++    .trim()
++    .replace(/[^a-z0-9\s_-]/g, "")
++    .replace(/[\s_-]+/g, "-")
++    .replace(/^-+|-+$/g, "")
++    .slice(0, 80);
++}
+diff --git a/lib/auth/guard.ts b/lib/auth/guard.ts
+new file mode 100644
+index 0000000..8190616
+--- /dev/null
++++ b/lib/auth/guard.ts
+@@ -0,0 +1,17 @@
++import { auth } from "@/lib/auth";
++
++/**
++ * Server Actions are public HTTP endpoints. The middleware gates *pages*, not
++ * actions — a stranger who knows the action ID can POST to it directly. Every
++ * mutation calls this first. Rule 7 is enforced here or nowhere.
++ */
++export async function requireOwner(): Promise<string> {
++  const session = await auth();
++  const email = session?.user?.email?.toLowerCase();
++  const owner = process.env.OWNER_EMAIL?.toLowerCase();
++
++  if (!email || !owner || email !== owner) {
++    throw new Error("Unauthorized");
++  }
++  return email;
++}
+diff --git a/lib/cloudinary/sign.ts b/lib/cloudinary/sign.ts
+new file mode 100644
+index 0000000..219ca4b
+--- /dev/null
++++ b/lib/cloudinary/sign.ts
+@@ -0,0 +1,29 @@
++"use server";
++
++import { env } from "@/lib/env";
++import { requireOwner } from "@/lib/auth/guard";
++import { signParams } from "./signature";
++
++/**
++ * The browser uploads straight to Cloudinary; the secret never leaves the
++ * server. We only sign the request. An unsigned upload preset would let
++ * anyone on the internet fill your media library.
++ */
++export async function signUpload() {
++  await requireOwner();
++  const e = env();
++  if (!e.CLOUDINARY_CLOUD_NAME || !e.CLOUDINARY_API_KEY || !e.CLOUDINARY_API_SECRET) {
++    throw new Error("Cloudinary is not configured. See .env.example");
++  }
++
++  const timestamp = Math.round(Date.now() / 1000);
++  const folder = "persona-os";
++
++  return {
++    signature: signParams({ folder, timestamp }, e.CLOUDINARY_API_SECRET),
++    timestamp,
++    folder,
++    apiKey: e.CLOUDINARY_API_KEY,
++    cloudName: e.CLOUDINARY_CLOUD_NAME,
++  };
++}
+diff --git a/lib/cloudinary/signature.ts b/lib/cloudinary/signature.ts
+new file mode 100644
+index 0000000..39c711a
+--- /dev/null
++++ b/lib/cloudinary/signature.ts
+@@ -0,0 +1,19 @@
++import crypto from "node:crypto";
++
++/**
++ * Pure, sync, and testable. It lives outside sign.ts because a "use server"
++ * module may only export async functions — exporting this from there is a
++ * build error, not a style preference.
++ *
++ * Cloudinary's algorithm: sort params, join as k=v&…, append secret, SHA-1.
++ */
++export function signParams(
++  params: Record<string, string | number>,
++  secret: string,
++): string {
++  const toSign = Object.keys(params)
++    .sort()
++    .map((k) => `${k}=${params[k]}`)
++    .join("&");
++  return crypto.createHash("sha1").update(toSign + secret).digest("hex");
++}
+diff --git a/lib/db/schema.ts b/lib/db/schema.ts
+index c2adfa1..bbe34ed 100644
+--- a/lib/db/schema.ts
++++ b/lib/db/schema.ts
+@@ -84,9 +84,27 @@ export const ENTITY_TYPES = [
+ 
+ export type EntityType = (typeof ENTITY_TYPES)[number];
+ 
+-export const ENTITY_STATUSES = ["draft", "published"] as const;
++export const ENTITY_STATUSES = ["draft", "published", "archived"] as const;
+ export type EntityStatus = (typeof ENTITY_STATUSES)[number];
+ 
++/** Cloudinary references. We never store bytes, only the public_id. */
++export const media = pgTable("media", {
++  id: text("id")
++    .primaryKey()
++    .$defaultFn(() => crypto.randomUUID()),
++  publicId: text("public_id").notNull().unique(),
++  url: text("url").notNull(),
++  width: integer("width").notNull(),
++  height: integer("height").notNull(),
++  format: text("format").notNull(),
++  bytes: integer("bytes").notNull(),
++  /** Never optional in the UI. Accessibility is a floor, not a polish step. */
++  alt: text("alt").notNull().default(""),
++  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
++});
++
++export type Media = typeof media.$inferSelect;
++
+ export const entities = pgTable(
+   "entity",
+   {
+@@ -98,12 +116,21 @@ export const entities = pgTable(
+     title: text("title").notNull(),
+     summary: text("summary"),
+     status: text("status").$type<EntityStatus>().notNull().default("draft"),
++    /** Structured blocks (D20), not markdown. See features/entities/blocks.ts */
++    body: jsonb("body").$type<unknown[]>().notNull().default([]),
++    coverMediaId: text("cover_media_id").references(() => media.id, {
++      onDelete: "set null",
++    }),
+     /** Type-specific fields live here until they earn a column. */
+     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+     /** Drives the Timeline (M7). Derived, never stored as a separate table. */
+     occurredAt: timestamp("occurred_at", { mode: "date" }),
+     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+-    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
++    updatedAt: timestamp("updated_at", { mode: "date" })
++      .notNull()
++      .defaultNow()
++      /** Without this, "Recently edited" silently lies. */
++      .$onUpdate(() => new Date()),
+   },
+   (t) => [
+     uniqueIndex("entity_slug_idx").on(t.slug),
+diff --git a/package.json b/package.json
+index c62b9d4..2a0174f 100644
+--- a/package.json
++++ b/package.json
+@@ -40,6 +40,7 @@
+     "drizzle-kit": "^0.30.1",
+     "pg": "^8.22.0",
+     "tailwindcss": "^4.0.0",
++    "tsx": "^4.23.0",
+     "typescript": "^5.7.3",
+     "vitest": "^4.1.10"
+   }
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index c101852..d840dee 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -78,12 +78,15 @@ importers:
+       tailwindcss:
+         specifier: ^4.0.0
+         version: 4.3.2
++      tsx:
++        specifier: ^4.23.0
++        version: 4.23.0
+       typescript:
+         specifier: ^5.7.3
+         version: 5.9.3
+       vitest:
+         specifier: ^4.1.10
+-        version: 4.1.10(@types/node@22.20.1)(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0))
++        version: 4.1.10(@types/node@22.20.1)(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0))
+ 
+ packages:
+ 
+@@ -151,6 +154,12 @@ packages:
+     cpu: [ppc64]
+     os: [aix]
+ 
++  '@esbuild/aix-ppc64@0.28.1':
++    resolution: {integrity: sha512-Svl7tq8k/08+p6CXPpRjQ1fKX+1odH/BQbb48fV6fj3CWHhsoIOoY87w1oHXm0qEpkIK3ZfVgp0hed3XBXzXMQ==}
++    engines: {node: '>=18'}
++    cpu: [ppc64]
++    os: [aix]
++
+   '@esbuild/android-arm64@0.18.20':
+     resolution: {integrity: sha512-Nz4rJcchGDtENV0eMKUNa6L12zz2zBDXuhj/Vjh18zGqB44Bi7MBMSXjgunJgjRhCmKOjnPuZp4Mb6OKqtMHLQ==}
+     engines: {node: '>=12'}
+@@ -163,6 +172,12 @@ packages:
+     cpu: [arm64]
+     os: [android]
+ 
++  '@esbuild/android-arm64@0.28.1':
++    resolution: {integrity: sha512-34EGEbCIAgosYz6goLcopX6Mo7NyGv9tfwEM2/7Ce2VcVRk568iSvniGWcUXIy7wEDR1wzolcxcriFVrWYcwBg==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [android]
++
+   '@esbuild/android-arm@0.18.20':
+     resolution: {integrity: sha512-fyi7TDI/ijKKNZTUJAQqiG5T7YjJXgnzkURqmGj13C6dCqckZBLdl4h7bkhHt/t0WP+zO9/zwroDvANaOqO5Sw==}
+     engines: {node: '>=12'}
+@@ -175,6 +190,12 @@ packages:
+     cpu: [arm]
+     os: [android]
+ 
++  '@esbuild/android-arm@0.28.1':
++    resolution: {integrity: sha512-0k2F129Xdio1TdJfzJ8sy1Q47vUD2NnwdhiAf7drUN1EBTfPf4hsFCtmMgu/6m8JSzsBrlmVjudMBQqOfG8usQ==}
++    engines: {node: '>=18'}
++    cpu: [arm]
++    os: [android]
++
+   '@esbuild/android-x64@0.18.20':
+     resolution: {integrity: sha512-8GDdlePJA8D6zlZYJV/jnrRAi6rOiNaCC/JclcXpB+KIuvfBN4owLtgzY2bsxnx666XjJx2kDPUmnTtR8qKQUg==}
+     engines: {node: '>=12'}
+@@ -187,6 +208,12 @@ packages:
+     cpu: [x64]
+     os: [android]
+ 
++  '@esbuild/android-x64@0.28.1':
++    resolution: {integrity: sha512-dbwY7ltSMDWsRatcRpCnES4F+im88OCUgGZjy52shC7GqHRE/cYlxNbB4Z4UpJswpcc4Qxd2oE/ufM0p61IKng==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [android]
++
+   '@esbuild/darwin-arm64@0.18.20':
+     resolution: {integrity: sha512-bxRHW5kHU38zS2lPTPOyuyTm+S+eobPUnTNkdJEfAddYgEcll4xkT8DB9d2008DtTbl7uJag2HuE5NZAZgnNEA==}
+     engines: {node: '>=12'}
+@@ -199,6 +226,12 @@ packages:
+     cpu: [arm64]
+     os: [darwin]
+ 
++  '@esbuild/darwin-arm64@0.28.1':
++    resolution: {integrity: sha512-TZbWkQY7kvTAXbXUT7uVACR5cMHsDiSz9z7ZKAX/RTq/WJEk3QyRr0wZpNhBDX+/0CtdqUIJlOiodQcta6tY3Q==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [darwin]
++
+   '@esbuild/darwin-x64@0.18.20':
+     resolution: {integrity: sha512-pc5gxlMDxzm513qPGbCbDukOdsGtKhfxD1zJKXjCCcU7ju50O7MeAZ8c4krSJcOIJGFR+qx21yMMVYwiQvyTyQ==}
+     engines: {node: '>=12'}
+@@ -211,6 +244,12 @@ packages:
+     cpu: [x64]
+     os: [darwin]
+ 
++  '@esbuild/darwin-x64@0.28.1':
++    resolution: {integrity: sha512-zfdzgK9ACBNZLI/CyHTOx81SyNbM6YXn7rxSgX97VjyiPl9W1i4Ka4fgKECEoFCKGpvBj5qArWIGgQjOwkgskQ==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [darwin]
++
+   '@esbuild/freebsd-arm64@0.18.20':
+     resolution: {integrity: sha512-yqDQHy4QHevpMAaxhhIwYPMv1NECwOvIpGCZkECn8w2WFHXjEwrBn3CeNIYsibZ/iZEUemj++M26W3cNR5h+Tw==}
+     engines: {node: '>=12'}
+@@ -223,6 +262,12 @@ packages:
+     cpu: [arm64]
+     os: [freebsd]
+ 
++  '@esbuild/freebsd-arm64@0.28.1':
++    resolution: {integrity: sha512-wG2EA8ENdEI0qhkSZMjfqrdY+ziCYCPMmtZjjIwOmXFjmyzEHn+UUxk5of+SYsjtfs3VpnlC7QLzSI5hY/rOAw==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [freebsd]
++
+   '@esbuild/freebsd-x64@0.18.20':
+     resolution: {integrity: sha512-tgWRPPuQsd3RmBZwarGVHZQvtzfEBOreNuxEMKFcd5DaDn2PbBxfwLcj4+aenoh7ctXcbXmOQIn8HI6mCSw5MQ==}
+     engines: {node: '>=12'}
+@@ -235,6 +280,12 @@ packages:
+     cpu: [x64]
+     os: [freebsd]
+ 
++  '@esbuild/freebsd-x64@0.28.1':
++    resolution: {integrity: sha512-i7dZ9vQgnvSCzi/rYCXNgtF/U+eKZNJBzu3eTQbRgHnM7tNSizLOkRFAl3qzVc/Op/u5YkHHa4pf/3DOYHthLQ==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [freebsd]
++
+   '@esbuild/linux-arm64@0.18.20':
+     resolution: {integrity: sha512-2YbscF+UL7SQAVIpnWvYwM+3LskyDmPhe31pE7/aoTMFKKzIc9lLbyGUpmmb8a8AixOL61sQ/mFh3jEjHYFvdA==}
+     engines: {node: '>=12'}
+@@ -247,6 +298,12 @@ packages:
+     cpu: [arm64]
+     os: [linux]
+ 
++  '@esbuild/linux-arm64@0.28.1':
++    resolution: {integrity: sha512-yHs+0uc8+nvEAfAfxrWQKK5peSNzBc4PegcMO0EJ2hT71uA7vB8Ihg2e77R2P7SG5uYjPbHlLLmve4LLLRCf0g==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [linux]
++
+   '@esbuild/linux-arm@0.18.20':
+     resolution: {integrity: sha512-/5bHkMWnq1EgKr1V+Ybz3s1hWXok7mDFUMQ4cG10AfW3wL02PSZi5kFpYKrptDsgb2WAJIvRcDm+qIvXf/apvg==}
+     engines: {node: '>=12'}
+@@ -259,6 +316,12 @@ packages:
+     cpu: [arm]
+     os: [linux]
+ 
++  '@esbuild/linux-arm@0.28.1':
++    resolution: {integrity: sha512-qVXBOHQS+d5Y722GwJzJUtOLlX7km3CraOaGormF1pDtPd2C/l1SHRPgjLunLGe51Sh5YYWKMFDyV4SxgMQYTQ==}
++    engines: {node: '>=18'}
++    cpu: [arm]
++    os: [linux]
++
+   '@esbuild/linux-ia32@0.18.20':
+     resolution: {integrity: sha512-P4etWwq6IsReT0E1KHU40bOnzMHoH73aXp96Fs8TIT6z9Hu8G6+0SHSw9i2isWrD2nbx2qo5yUqACgdfVGx7TA==}
+     engines: {node: '>=12'}
+@@ -271,6 +334,12 @@ packages:
+     cpu: [ia32]
+     os: [linux]
+ 
++  '@esbuild/linux-ia32@0.28.1':
++    resolution: {integrity: sha512-d1z4ZuP0ajrfz/FhGT4vv278rX8KnPPJx8i5+AtK7TYbx9Le9F1hyzurZpkEyjkGa9dUGhQow4C1NmeGvqxN2w==}
++    engines: {node: '>=18'}
++    cpu: [ia32]
++    os: [linux]
++
+   '@esbuild/linux-loong64@0.18.20':
+     resolution: {integrity: sha512-nXW8nqBTrOpDLPgPY9uV+/1DjxoQ7DoB2N8eocyq8I9XuqJ7BiAMDMf9n1xZM9TgW0J8zrquIb/A7s3BJv7rjg==}
+     engines: {node: '>=12'}
+@@ -283,6 +352,12 @@ packages:
+     cpu: [loong64]
+     os: [linux]
+ 
++  '@esbuild/linux-loong64@0.28.1':
++    resolution: {integrity: sha512-M5sRjUVZrkm1OAPR3dlOYzNmN+loZKGVi1VUQGrwuqLcbR6qeAz+famMhjASeH3YVKvZz+zT1jlh/keC3Rj/lg==}
++    engines: {node: '>=18'}
++    cpu: [loong64]
++    os: [linux]
++
+   '@esbuild/linux-mips64el@0.18.20':
+     resolution: {integrity: sha512-d5NeaXZcHp8PzYy5VnXV3VSd2D328Zb+9dEq5HE6bw6+N86JVPExrA6O68OPwobntbNJ0pzCpUFZTo3w0GyetQ==}
+     engines: {node: '>=12'}
+@@ -295,6 +370,12 @@ packages:
+     cpu: [mips64el]
+     os: [linux]
+ 
++  '@esbuild/linux-mips64el@0.28.1':
++    resolution: {integrity: sha512-mRObBZeHh2OxcBFPWE/FjylkRgZdYuiTR3vaTozquCGOH14iP9oN4x4Ge81CoIDYQrXmIxpFumJBu5MtZpnQJQ==}
++    engines: {node: '>=18'}
++    cpu: [mips64el]
++    os: [linux]
++
+   '@esbuild/linux-ppc64@0.18.20':
+     resolution: {integrity: sha512-WHPyeScRNcmANnLQkq6AfyXRFr5D6N2sKgkFo2FqguP44Nw2eyDlbTdZwd9GYk98DZG9QItIiTlFLHJHjxP3FA==}
+     engines: {node: '>=12'}
+@@ -307,6 +388,12 @@ packages:
+     cpu: [ppc64]
+     os: [linux]
+ 
++  '@esbuild/linux-ppc64@0.28.1':
++    resolution: {integrity: sha512-slScBsMAb3GFDcdrCgLwZtPYRoH2H/youv10QiZyRjmsP48fznoveWytSgCI/R0ZcUgpc0ZhIUEx6LHts8yrfQ==}
++    engines: {node: '>=18'}
++    cpu: [ppc64]
++    os: [linux]
++
+   '@esbuild/linux-riscv64@0.18.20':
+     resolution: {integrity: sha512-WSxo6h5ecI5XH34KC7w5veNnKkju3zBRLEQNY7mv5mtBmrP/MjNBCAlsM2u5hDBlS3NGcTQpoBvRzqBcRtpq1A==}
+     engines: {node: '>=12'}
+@@ -319,6 +406,12 @@ packages:
+     cpu: [riscv64]
+     os: [linux]
+ 
++  '@esbuild/linux-riscv64@0.28.1':
++    resolution: {integrity: sha512-kw0owk1o0GFETUJyW0jc0G4Yzs0BHZn0JDZ8JRT088vjJYX777BAs1fDGxAC+q831qOs2DTC96mNsG2opdfyyQ==}
++    engines: {node: '>=18'}
++    cpu: [riscv64]
++    os: [linux]
++
+   '@esbuild/linux-s390x@0.18.20':
+     resolution: {integrity: sha512-+8231GMs3mAEth6Ja1iK0a1sQ3ohfcpzpRLH8uuc5/KVDFneH6jtAJLFGafpzpMRO6DzJ6AvXKze9LfFMrIHVQ==}
+     engines: {node: '>=12'}
+@@ -331,6 +424,12 @@ packages:
+     cpu: [s390x]
+     os: [linux]
+ 
++  '@esbuild/linux-s390x@0.28.1':
++    resolution: {integrity: sha512-/lAIjX8aYFRByhh6L5rYtPEDRqa9de/4V/juOXcta5frjvzXO4/sqEtyytse0g3zZFuWu5cDN0MkLz2qRDD2Ag==}
++    engines: {node: '>=18'}
++    cpu: [s390x]
++    os: [linux]
++
+   '@esbuild/linux-x64@0.18.20':
+     resolution: {integrity: sha512-UYqiqemphJcNsFEskc73jQ7B9jgwjWrSayxawS6UVFZGWrAAtkzjxSqnoclCXxWtfwLdzU+vTpcNYhpn43uP1w==}
+     engines: {node: '>=12'}
+@@ -343,6 +442,18 @@ packages:
+     cpu: [x64]
+     os: [linux]
+ 
++  '@esbuild/linux-x64@0.28.1':
++    resolution: {integrity: sha512-u/anNYF2mmVOEDwLtnQ1wOr3EZ9sTNGLWrsYGYwHWzGA3Si84IOkHXlbWTD1NB+9/1lcnweYKO54uhxZydNzfA==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [linux]
++
++  '@esbuild/netbsd-arm64@0.28.1':
++    resolution: {integrity: sha512-oks0DYbLwWMmaakTsCb+zL4E+aHRVLom9IJZOAthMQEPiQmydXHkziYEsGYRx0uNV/IjEKGAV941JzH02pflqw==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [netbsd]
++
+   '@esbuild/netbsd-x64@0.18.20':
+     resolution: {integrity: sha512-iO1c++VP6xUBUmltHZoMtCUdPlnPGdBom6IrO4gyKPFFVBKioIImVooR5I83nTew5UOYrk3gIJhbZh8X44y06A==}
+     engines: {node: '>=12'}
+@@ -355,6 +466,18 @@ packages:
+     cpu: [x64]
+     os: [netbsd]
+ 
++  '@esbuild/netbsd-x64@0.28.1':
++    resolution: {integrity: sha512-aeL6lAnN89Hz43Mlh1G8ARasbuoYvSITDEx0tHh5b7jJnHcssqgjy9Yx430GDpmCa6OyrKoS0aNRjKundRizGg==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [netbsd]
++
++  '@esbuild/openbsd-arm64@0.28.1':
++    resolution: {integrity: sha512-MEFJe5C3R8pwXdZ5Y21oo6m7ePiS0d9pWucn99O/wvyJZChoIQKrQDxKrGeW8F5+T0okTHesAmDeiHDTIq0V/Q==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [openbsd]
++
+   '@esbuild/openbsd-x64@0.18.20':
+     resolution: {integrity: sha512-e5e4YSsuQfX4cxcygw/UCPIEP6wbIL+se3sxPdCiMbFLBWu0eiZOJ7WoD+ptCLrmjZBK1Wk7I6D/I3NglUGOxg==}
+     engines: {node: '>=12'}
+@@ -367,6 +490,18 @@ packages:
+     cpu: [x64]
+     os: [openbsd]
+ 
++  '@esbuild/openbsd-x64@0.28.1':
++    resolution: {integrity: sha512-i/ZLIOafE0Z8cI/XANJAixoJL/uRAoS2xOA3rb0xN+KK0K177cMAsQYkzHtBrtMXAKuAc7HGgcWiZ/sRC1Nxgw==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [openbsd]
++
++  '@esbuild/openharmony-arm64@0.28.1':
++    resolution: {integrity: sha512-ge+Z7EXFNt2BO1oAMsVpiQ8EwndV9i1xXerAeTIK7AtPs3bKFXQM7nlRxDSIUIMeueR1CNXxqztLzdNeReKBJg==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [openharmony]
++
+   '@esbuild/sunos-x64@0.18.20':
+     resolution: {integrity: sha512-kDbFRFp0YpTQVVrqUd5FTYmWo45zGaXe0X8E1G/LKFC0v8x0vWrhOWSLITcCn63lmZIxfOMXtCfti/RxN/0wnQ==}
+     engines: {node: '>=12'}
+@@ -379,6 +514,12 @@ packages:
+     cpu: [x64]
+     os: [sunos]
+ 
++  '@esbuild/sunos-x64@0.28.1':
++    resolution: {integrity: sha512-BEjgtECkL3vY+SaSQ6nzVfiALUeFxpawyp8Jmf5PtYhf1Ug40N1h/hxlhts+f1FvSvarEigdxS3BlSMI2PJLcQ==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [sunos]
++
+   '@esbuild/win32-arm64@0.18.20':
+     resolution: {integrity: sha512-ddYFR6ItYgoaq4v4JmQQaAI5s7npztfV4Ag6NrhiaW0RrnOXqBkgwZLofVTlq1daVTQNhtI5oieTvkRPfZrePg==}
+     engines: {node: '>=12'}
+@@ -391,6 +532,12 @@ packages:
+     cpu: [arm64]
+     os: [win32]
+ 
++  '@esbuild/win32-arm64@0.28.1':
++    resolution: {integrity: sha512-lCv9eK/H6ZJWbE7bh2nw54CZ9M2nupBxJcTsdk/QQnWkdSjKGuxmmH8/GWrlT1eMmZfn4dGcCjRte397WqfQXA==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [win32]
++
+   '@esbuild/win32-ia32@0.18.20':
+     resolution: {integrity: sha512-Wv7QBi3ID/rROT08SABTS7eV4hX26sVduqDOTe1MvGMjNd3EjOz4b7zeexIR62GTIEKrfJXKL9LFxTYgkyeu7g==}
+     engines: {node: '>=12'}
+@@ -403,6 +550,12 @@ packages:
+     cpu: [ia32]
+     os: [win32]
+ 
++  '@esbuild/win32-ia32@0.28.1':
++    resolution: {integrity: sha512-zvb/mB2bSCoJOpoCBgYKKpX6YM6mJBlBUVUtVj41DlZJVEB6/0CKlRYxP5wWl1C1ILiCoAU5wZZ4q1P3qeS6Eg==}
++    engines: {node: '>=18'}
++    cpu: [ia32]
++    os: [win32]
++
+   '@esbuild/win32-x64@0.18.20':
+     resolution: {integrity: sha512-kTdfRcSiDfQca/y9QIkng02avJ+NCaQvrMejlsB3RRv5sE9rRoeBPISaZpKxHELzRxZyLvNts1P27W3wV+8geQ==}
+     engines: {node: '>=12'}
+@@ -415,6 +568,12 @@ packages:
+     cpu: [x64]
+     os: [win32]
+ 
++  '@esbuild/win32-x64@0.28.1':
++    resolution: {integrity: sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [win32]
++
+   '@img/colour@1.1.0':
+     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
+     engines: {node: '>=18'}
+@@ -1094,6 +1253,11 @@ packages:
+     engines: {node: '>=12'}
+     hasBin: true
+ 
++  esbuild@0.28.1:
++    resolution: {integrity: sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw==}
++    engines: {node: '>=18'}
++    hasBin: true
++
+   estree-walker@3.0.3:
+     resolution: {integrity: sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g==}
+ 
+@@ -1492,6 +1656,11 @@ packages:
+   tslib@2.8.1:
+     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
+ 
++  tsx@4.23.0:
++    resolution: {integrity: sha512-eUdUIaCr963q2h5u3+QwvYp0+eqPvn+egeqZUm0hwERCqqx1E3kK5ehbGCvqSE5MQAULr67ww0cA3jKc3YkM1w==}
++    engines: {node: '>=18.0.0'}
++    hasBin: true
++
+   typescript@5.9.3:
+     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+     engines: {node: '>=14.17'}
+@@ -1670,138 +1839,216 @@ snapshots:
+   '@esbuild/aix-ppc64@0.19.12':
+     optional: true
+ 
++  '@esbuild/aix-ppc64@0.28.1':
++    optional: true
++
+   '@esbuild/android-arm64@0.18.20':
+     optional: true
+ 
+   '@esbuild/android-arm64@0.19.12':
+     optional: true
+ 
++  '@esbuild/android-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/android-arm@0.18.20':
+     optional: true
+ 
+   '@esbuild/android-arm@0.19.12':
+     optional: true
+ 
++  '@esbuild/android-arm@0.28.1':
++    optional: true
++
+   '@esbuild/android-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/android-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/android-x64@0.28.1':
++    optional: true
++
+   '@esbuild/darwin-arm64@0.18.20':
+     optional: true
+ 
+   '@esbuild/darwin-arm64@0.19.12':
+     optional: true
+ 
++  '@esbuild/darwin-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/darwin-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/darwin-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/darwin-x64@0.28.1':
++    optional: true
++
+   '@esbuild/freebsd-arm64@0.18.20':
+     optional: true
+ 
+   '@esbuild/freebsd-arm64@0.19.12':
+     optional: true
+ 
++  '@esbuild/freebsd-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/freebsd-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/freebsd-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/freebsd-x64@0.28.1':
++    optional: true
++
+   '@esbuild/linux-arm64@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-arm64@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/linux-arm@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-arm@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-arm@0.28.1':
++    optional: true
++
+   '@esbuild/linux-ia32@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-ia32@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-ia32@0.28.1':
++    optional: true
++
+   '@esbuild/linux-loong64@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-loong64@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-loong64@0.28.1':
++    optional: true
++
+   '@esbuild/linux-mips64el@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-mips64el@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-mips64el@0.28.1':
++    optional: true
++
+   '@esbuild/linux-ppc64@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-ppc64@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-ppc64@0.28.1':
++    optional: true
++
+   '@esbuild/linux-riscv64@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-riscv64@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-riscv64@0.28.1':
++    optional: true
++
+   '@esbuild/linux-s390x@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-s390x@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-s390x@0.28.1':
++    optional: true
++
+   '@esbuild/linux-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/linux-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/linux-x64@0.28.1':
++    optional: true
++
++  '@esbuild/netbsd-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/netbsd-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/netbsd-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/netbsd-x64@0.28.1':
++    optional: true
++
++  '@esbuild/openbsd-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/openbsd-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/openbsd-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/openbsd-x64@0.28.1':
++    optional: true
++
++  '@esbuild/openharmony-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/sunos-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/sunos-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/sunos-x64@0.28.1':
++    optional: true
++
+   '@esbuild/win32-arm64@0.18.20':
+     optional: true
+ 
+   '@esbuild/win32-arm64@0.19.12':
+     optional: true
+ 
++  '@esbuild/win32-arm64@0.28.1':
++    optional: true
++
+   '@esbuild/win32-ia32@0.18.20':
+     optional: true
+ 
+   '@esbuild/win32-ia32@0.19.12':
+     optional: true
+ 
++  '@esbuild/win32-ia32@0.28.1':
++    optional: true
++
+   '@esbuild/win32-x64@0.18.20':
+     optional: true
+ 
+   '@esbuild/win32-x64@0.19.12':
+     optional: true
+ 
++  '@esbuild/win32-x64@0.28.1':
++    optional: true
++
+   '@img/colour@1.1.0':
+     optional: true
+ 
+@@ -2140,13 +2387,13 @@ snapshots:
+       chai: 6.2.2
+       tinyrainbow: 3.1.0
+ 
+-  '@vitest/mocker@4.1.10(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0))':
++  '@vitest/mocker@4.1.10(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0))':
+     dependencies:
+       '@vitest/spy': 4.1.10
+       estree-walker: 3.0.3
+       magic-string: 0.30.21
+     optionalDependencies:
+-      vite: 8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)
++      vite: 8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0)
+ 
+   '@vitest/pretty-format@4.1.10':
+     dependencies:
+@@ -2291,6 +2538,35 @@ snapshots:
+       '@esbuild/win32-ia32': 0.19.12
+       '@esbuild/win32-x64': 0.19.12
+ 
++  esbuild@0.28.1:
++    optionalDependencies:
++      '@esbuild/aix-ppc64': 0.28.1
++      '@esbuild/android-arm': 0.28.1
++      '@esbuild/android-arm64': 0.28.1
++      '@esbuild/android-x64': 0.28.1
++      '@esbuild/darwin-arm64': 0.28.1
++      '@esbuild/darwin-x64': 0.28.1
++      '@esbuild/freebsd-arm64': 0.28.1
++      '@esbuild/freebsd-x64': 0.28.1
++      '@esbuild/linux-arm': 0.28.1
++      '@esbuild/linux-arm64': 0.28.1
++      '@esbuild/linux-ia32': 0.28.1
++      '@esbuild/linux-loong64': 0.28.1
++      '@esbuild/linux-mips64el': 0.28.1
++      '@esbuild/linux-ppc64': 0.28.1
++      '@esbuild/linux-riscv64': 0.28.1
++      '@esbuild/linux-s390x': 0.28.1
++      '@esbuild/linux-x64': 0.28.1
++      '@esbuild/netbsd-arm64': 0.28.1
++      '@esbuild/netbsd-x64': 0.28.1
++      '@esbuild/openbsd-arm64': 0.28.1
++      '@esbuild/openbsd-x64': 0.28.1
++      '@esbuild/openharmony-arm64': 0.28.1
++      '@esbuild/sunos-x64': 0.28.1
++      '@esbuild/win32-arm64': 0.28.1
++      '@esbuild/win32-ia32': 0.28.1
++      '@esbuild/win32-x64': 0.28.1
++
+   estree-walker@3.0.3:
+     dependencies:
+       '@types/estree': 1.0.9
+@@ -2638,13 +2914,19 @@ snapshots:
+ 
+   tslib@2.8.1: {}
+ 
++  tsx@4.23.0:
++    dependencies:
++      esbuild: 0.28.1
++    optionalDependencies:
++      fsevents: 2.3.3
++
+   typescript@5.9.3: {}
+ 
+   uncrypto@0.1.3: {}
+ 
+   undici-types@6.21.0: {}
+ 
+-  vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0):
++  vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0):
+     dependencies:
+       lightningcss: 1.32.0
+       picomatch: 4.0.5
+@@ -2656,11 +2938,12 @@ snapshots:
+       esbuild: 0.19.12
+       fsevents: 2.3.3
+       jiti: 2.7.0
++      tsx: 4.23.0
+ 
+-  vitest@4.1.10(@types/node@22.20.1)(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)):
++  vitest@4.1.10(@types/node@22.20.1)(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0)):
+     dependencies:
+       '@vitest/expect': 4.1.10
+-      '@vitest/mocker': 4.1.10(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0))
++      '@vitest/mocker': 4.1.10(vite@8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0))
+       '@vitest/pretty-format': 4.1.10
+       '@vitest/runner': 4.1.10
+       '@vitest/snapshot': 4.1.10
+@@ -2677,7 +2960,7 @@ snapshots:
+       tinyexec: 1.2.4
+       tinyglobby: 0.2.17
+       tinyrainbow: 3.1.0
+-      vite: 8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)
++      vite: 8.1.3(@types/node@22.20.1)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.0)
+       why-is-node-running: 2.3.0
+     optionalDependencies:
+       '@types/node': 22.20.1
+diff --git a/tests/blocks.test.ts b/tests/blocks.test.ts
+new file mode 100644
+index 0000000..a4746c7
+--- /dev/null
++++ b/tests/blocks.test.ts
+@@ -0,0 +1,45 @@
++import { describe, expect, it } from "vitest";
++import { bodySchema, newBlock } from "@/features/entities/blocks";
++
++describe("body blocks", () => {
++  it("accepts a well-formed body", () => {
++    const body = [
++      { id: "1", type: "heading", level: 2, text: "Intro" },
++      { id: "2", type: "paragraph", text: "Hello." },
++      { id: "3", type: "divider" },
++    ];
++    expect(bodySchema.safeParse(body).success).toBe(true);
++  });
++
++  it("rejects an unknown block type", () => {
++    expect(bodySchema.safeParse([{ id: "1", type: "marquee" }]).success).toBe(false);
++  });
++
++  it("rejects a heading at an illegal level", () => {
++    expect(
++      bodySchema.safeParse([{ id: "1", type: "heading", level: 1, text: "H1" }]).success,
++    ).toBe(false);
++  });
++
++  it("rejects an image with a non-URL", () => {
++    expect(
++      bodySchema.safeParse([
++        { id: "1", type: "image", mediaId: null, url: "not-a-url", alt: "x" },
++      ]).success,
++    ).toBe(false);
++  });
++
++  it("requires alt text on images", () => {
++    expect(
++      bodySchema.safeParse([
++        { id: "1", type: "image", mediaId: null, url: "https://a.co/b.png" },
++      ]).success,
++    ).toBe(false);
++  });
++
++  it("newBlock produces a valid block for every type", () => {
++    for (const t of ["paragraph", "heading", "quote", "code", "divider"] as const) {
++      expect(bodySchema.safeParse([newBlock(t)]).success).toBe(true);
++    }
++  });
++});
+diff --git a/tests/cloudinary-sign.test.ts b/tests/cloudinary-sign.test.ts
+new file mode 100644
+index 0000000..d4e9ae3
+--- /dev/null
++++ b/tests/cloudinary-sign.test.ts
+@@ -0,0 +1,22 @@
++import { createHash } from "node:crypto";
++import { describe, expect, it } from "vitest";
++import { signParams } from "@/lib/cloudinary/signature";
++
++describe("cloudinary signature", () => {
++  it("sorts params before signing (order must not change the signature)", () => {
++    const a = signParams({ timestamp: 1, folder: "x" }, "secret");
++    const b = signParams({ folder: "x", timestamp: 1 }, "secret");
++    expect(a).toBe(b);
++  });
++
++  it("matches Cloudinary's documented algorithm: sha1(sorted&joined + secret)", () => {
++    const expected = createHash("sha1")
++      .update("folder=persona-os&timestamp=1700000000" + "s3cr3t")
++      .digest("hex");
++    expect(signParams({ timestamp: 1700000000, folder: "persona-os" }, "s3cr3t")).toBe(expected);
++  });
++
++  it("changes when the secret changes", () => {
++    expect(signParams({ timestamp: 1 }, "a")).not.toBe(signParams({ timestamp: 1 }, "b"));
++  });
++});
+diff --git a/tests/entity-schema.test.ts b/tests/entity-schema.test.ts
+new file mode 100644
+index 0000000..2058ae5
+--- /dev/null
++++ b/tests/entity-schema.test.ts
+@@ -0,0 +1,48 @@
++import { describe, expect, it } from "vitest";
++import { METADATA_SCHEMAS, entityInputSchema } from "@/features/entities/schemas";
++
++describe("per-type metadata (derived from field descriptors)", () => {
++  it("requires career employer and role", () => {
++    expect(METADATA_SCHEMAS.career.safeParse({}).success).toBe(false);
++    expect(
++      METADATA_SCHEMAS.career.safeParse({ employer: "Jio", role: "Intern" }).success,
++    ).toBe(true);
++  });
++
++  it("treats empty optional fields as absent, not invalid", () => {
++    const r = METADATA_SCHEMAS.train.safeParse({ problemUrl: "", pattern: "" });
++    expect(r.success).toBe(true);
++  });
++
++  it("rejects a malformed URL when one is supplied", () => {
++    expect(METADATA_SCHEMAS.train.safeParse({ problemUrl: "nope" }).success).toBe(false);
++  });
++
++  it("constrains select fields to their options", () => {
++    expect(METADATA_SCHEMAS.train.safeParse({ difficulty: "Trivial" }).success).toBe(false);
++    expect(METADATA_SCHEMAS.train.safeParse({ difficulty: "Hard" }).success).toBe(true);
++  });
++});
++
++describe("entity input", () => {
++  const base = {
++    type: "writing" as const,
++    title: "Hello",
++    slug: "hello",
++    status: "draft" as const,
++    body: [],
++    metadata: {},
++  };
++
++  it("accepts a minimal valid entity", () => {
++    expect(entityInputSchema.safeParse(base).success).toBe(true);
++  });
++
++  it("rejects an empty title", () => {
++    expect(entityInputSchema.safeParse({ ...base, title: "" }).success).toBe(false);
++  });
++
++  it("rejects a slug with uppercase or spaces", () => {
++    expect(entityInputSchema.safeParse({ ...base, slug: "Hello World" }).success).toBe(false);
++  });
++});
+diff --git a/tests/owner-guard.test.ts b/tests/owner-guard.test.ts
+new file mode 100644
+index 0000000..4d6c512
+--- /dev/null
++++ b/tests/owner-guard.test.ts
+@@ -0,0 +1,51 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++/**
++ * Server Actions are public HTTP endpoints. `middleware.ts` gates *pages*, so
++ * a stranger who learns an action ID can POST to it directly, bypassing every
++ * route check. requireOwner() is the only thing standing there.
++ */
++const authMock = vi.fn();
++vi.mock("@/lib/auth", () => ({ auth: () => authMock() }));
++
++const { requireOwner } = await import("@/lib/auth/guard");
++
++const OWNER = "owner@example.com";
++
++describe("requireOwner", () => {
++  beforeEach(() => {
++    process.env.OWNER_EMAIL = OWNER;
++    authMock.mockReset();
++  });
++
++  it("admits the owner", async () => {
++    authMock.mockResolvedValue({ user: { email: OWNER } });
++    await expect(requireOwner()).resolves.toBe(OWNER);
++  });
++
++  it("is case-insensitive", async () => {
++    authMock.mockResolvedValue({ user: { email: "OWNER@Example.com" } });
++    await expect(requireOwner()).resolves.toBe(OWNER);
++  });
++
++  it("throws for a signed-in stranger", async () => {
++    authMock.mockResolvedValue({ user: { email: "stranger@example.com" } });
++    await expect(requireOwner()).rejects.toThrow("Unauthorized");
++  });
++
++  it("throws when there is no session at all", async () => {
++    authMock.mockResolvedValue(null);
++    await expect(requireOwner()).rejects.toThrow("Unauthorized");
++  });
++
++  it("throws when the session has no email", async () => {
++    authMock.mockResolvedValue({ user: {} });
++    await expect(requireOwner()).rejects.toThrow("Unauthorized");
++  });
++
++  it("fails closed when OWNER_EMAIL is unset — never open", async () => {
++    delete process.env.OWNER_EMAIL;
++    authMock.mockResolvedValue({ user: { email: OWNER } });
++    await expect(requireOwner()).rejects.toThrow("Unauthorized");
++  });
++});
+diff --git a/tests/slug.test.ts b/tests/slug.test.ts
+new file mode 100644
+index 0000000..3a69c4b
+--- /dev/null
++++ b/tests/slug.test.ts
+@@ -0,0 +1,27 @@
++import { describe, expect, it } from "vitest";
++import { slugify } from "@/features/entities/slug";
++
++describe("slugify", () => {
++  it("lowercases and hyphenates", () => {
++    expect(slugify("On Building Slowly")).toBe("on-building-slowly");
++  });
++  it("strips punctuation", () => {
++    expect(slugify("Notes on Postgres: Part 2!")).toBe("notes-on-postgres-part-2");
++  });
++  it("strips accents rather than dropping the letter", () => {
++    expect(slugify("Café Diaries")).toBe("cafe-diaries");
++  });
++  it("collapses repeated separators", () => {
++    expect(slugify("a   b___c")).toBe("a-b-c");
++  });
++  it("trims leading and trailing hyphens", () => {
++    expect(slugify("  -- hello -- ")).toBe("hello");
++  });
++  it("is idempotent", () => {
++    const once = slugify("Two Sum — Revisited");
++    expect(slugify(once)).toBe(once);
++  });
++  it("survives a title with no slug-able characters", () => {
++    expect(slugify("!!!")).toBe("");
++  });
++});
+-- 
+2.43.0
+

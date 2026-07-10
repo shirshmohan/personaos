@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { EntityList } from "@/components/shared/entity-list";
 import { listEntitiesByType } from "@/features/entities/queries";
+import { Button } from "@/components/ui/button";
 import {
   ENTITY_TYPES,
   ENTITY_TYPE_META,
@@ -36,15 +38,27 @@ export default async function EntityTypePage({
   const meta = ENTITY_TYPE_META[type];
   const items = await listEntitiesByType(type);
 
+  const newHref = `/studio/${type}/new`;
+
   return (
     <>
-      <PageHeader title={meta.label} description={meta.blurb} />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader title={meta.label} description={meta.blurb} />
+        <Button asChild size="sm">
+          <Link href={newHref}>New</Link>
+        </Button>
+      </div>
       {items.length > 0 ? (
         <EntityList entities={items} />
       ) : (
         <EmptyState
           icon={meta.icon}
-          title={`No ${meta.label.toLowerCase()} entries yet. The editor arrives in Milestone 3.`}
+          title={`No ${meta.label.toLowerCase()} entries yet.`}
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link href={newHref}>Create the first one</Link>
+            </Button>
+          }
         />
       )}
     </>

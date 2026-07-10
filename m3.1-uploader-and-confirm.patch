@@ -1,0 +1,568 @@
+From 80ae937191a388063d248254532c7bf28cae4eb1 Mon Sep 17 00:00:00 2001
+From: claude <c@a.co>
+Date: Fri, 10 Jul 2026 03:02:16 +0000
+Subject: [PATCH] M3.1: cover uploader + archive confirmation
+
+---
+ app/studio/(workbench)/[type]/[slug]/page.tsx |   8 +-
+ app/studio/(workbench)/[type]/new/page.tsx    |   3 +
+ components/shared/confirm-button.tsx          |  41 ++++++
+ components/studio/block-editor.tsx            |  34 +++--
+ components/studio/entity-form.tsx             |  56 +++++++-
+ components/studio/media-upload.tsx            | 123 ++++++++++++++++++
+ features/entities/queries.ts                  |   7 +-
+ lib/cloudinary/upload.ts                      |  54 ++++++++
+ tests/cloudinary-upload.test.ts               |  85 ++++++++++++
+ 9 files changed, 391 insertions(+), 20 deletions(-)
+ create mode 100644 components/shared/confirm-button.tsx
+ create mode 100644 components/studio/media-upload.tsx
+ create mode 100644 lib/cloudinary/upload.ts
+ create mode 100644 tests/cloudinary-upload.test.ts
+
+diff --git a/app/studio/(workbench)/[type]/[slug]/page.tsx b/app/studio/(workbench)/[type]/[slug]/page.tsx
+index 369d762..9d7a918 100644
+--- a/app/studio/(workbench)/[type]/[slug]/page.tsx
++++ b/app/studio/(workbench)/[type]/[slug]/page.tsx
+@@ -1,7 +1,7 @@
+ import { notFound } from "next/navigation";
+ import { PageHeader } from "@/components/shared/page-header";
+ import { EntityForm } from "@/components/studio/entity-form";
+-import { getEntityBySlug } from "@/features/entities/queries";
++import { getEntityBySlug, getMediaById } from "@/features/entities/queries";
+ import { isEntityType } from "@/features/entities/types";
+ import { bodySchema } from "@/features/entities/blocks";
+ 
+@@ -18,6 +18,9 @@ export default async function EditEntityPage({
+ 
+   // Body is jsonb — trust nothing that came out of a JSONB column.
+   const body = bodySchema.safeParse(entity.body);
++  const cover = entity.coverMediaId
++    ? await getMediaById(entity.coverMediaId)
++    : undefined;
+ 
+   return (
+     <>
+@@ -38,6 +41,9 @@ export default async function EditEntityPage({
+             ? entity.occurredAt.toISOString().slice(0, 10)
+             : "",
+           metadata: (entity.metadata ?? {}) as Record<string, unknown>,
++          coverMediaId: entity.coverMediaId,
++          coverUrl: cover?.url ?? null,
++          coverAlt: cover?.alt ?? "",
+         }}
+       />
+     </>
+diff --git a/app/studio/(workbench)/[type]/new/page.tsx b/app/studio/(workbench)/[type]/new/page.tsx
+index 5878a4e..d670e11 100644
+--- a/app/studio/(workbench)/[type]/new/page.tsx
++++ b/app/studio/(workbench)/[type]/new/page.tsx
+@@ -24,6 +24,9 @@ export default async function NewEntityPage({
+           body: [],
+           occurredAt: "",
+           metadata: {},
++          coverMediaId: null,
++          coverUrl: null,
++          coverAlt: "",
+         }}
+       />
+     </>
+diff --git a/components/shared/confirm-button.tsx b/components/shared/confirm-button.tsx
+new file mode 100644
+index 0000000..5e32f5f
+--- /dev/null
++++ b/components/shared/confirm-button.tsx
+@@ -0,0 +1,41 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Button, type ButtonProps } from "@/components/ui/button";
++
++/**
++ * A destructive action should ask. Two-step rather than a modal: the button
++ * becomes its own confirmation, and reverts after a few seconds if ignored.
++ * No dialog to trap focus, nothing to dismiss.
++ */
++export function ConfirmButton({
++  onConfirm,
++  children,
++  confirmLabel = "Are you sure?",
++  ...props
++}: Omit<ButtonProps, "onClick"> & {
++  onConfirm: () => void;
++  confirmLabel?: string;
++}) {
++  const [armed, setArmed] = useState(false);
++
++  useEffect(() => {
++    if (!armed) return;
++    const t = setTimeout(() => setArmed(false), 4000);
++    return () => clearTimeout(t);
++  }, [armed]);
++
++  return (
++    <Button
++      type="button"
++      {...props}
++      onClick={() => {
++        if (!armed) return setArmed(true);
++        setArmed(false);
++        onConfirm();
++      }}
++    >
++      {armed ? confirmLabel : children}
++    </Button>
++  );
++}
+diff --git a/components/studio/block-editor.tsx b/components/studio/block-editor.tsx
+index 49af5be..6f97847 100644
+--- a/components/studio/block-editor.tsx
++++ b/components/studio/block-editor.tsx
+@@ -10,6 +10,7 @@ import {
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+ import { Textarea } from "@/components/ui/textarea";
++import { MediaUpload } from "./media-upload";
+ 
+ const ORDER: BlockType[] = ["paragraph", "heading", "quote", "code", "image", "divider"];
+ 
+@@ -111,17 +112,28 @@ export function BlockEditor({
+ 
+           {block.type === "image" ? (
+             <div className="flex flex-col gap-2">
+-              <Input
+-                value={block.url}
+-                placeholder="https://res.cloudinary.com/…"
+-                onChange={(e) => update(block.id, { url: e.target.value })}
+-              />
+-              {/* Required, not optional. An image without alt text is broken. */}
+-              <Input
+-                value={block.alt}
+-                placeholder="Describe this image (required)"
+-                onChange={(e) => update(block.id, { alt: e.target.value })}
+-              />
++              {block.url ? (
++                <>
++                  {/* eslint-disable-next-line @next/next/no-img-element */}
++                  <img
++                    src={block.url}
++                    alt={block.alt}
++                    className="h-32 w-auto rounded-md border border-(--color-border)"
++                  />
++                  {/* Alt stays editable after upload. */}
++                  <Input
++                    value={block.alt}
++                    placeholder="Describe this image (required)"
++                    onChange={(e) => update(block.id, { alt: e.target.value })}
++                  />
++                </>
++              ) : (
++                <MediaUpload
++                  onUploaded={(m) =>
++                    update(block.id, { mediaId: m.id, url: m.url, alt: m.alt })
++                  }
++                />
++              )}
+             </div>
+           ) : null}
+ 
+diff --git a/components/studio/entity-form.tsx b/components/studio/entity-form.tsx
+index 383a415..12406b3 100644
+--- a/components/studio/entity-form.tsx
++++ b/components/studio/entity-form.tsx
+@@ -8,6 +8,8 @@ import { slugify } from "@/features/entities/slug";
+ import { saveEntity, archiveEntity } from "@/features/entities/actions";
+ import type { EntityType } from "@/features/entities/types";
+ import { BlockEditor } from "./block-editor";
++import { MediaUpload } from "./media-upload";
++import { ConfirmButton } from "@/components/shared/confirm-button";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+@@ -24,6 +26,9 @@ export interface EntityFormValues {
+   body: Block[];
+   occurredAt: string;
+   metadata: Record<string, unknown>;
++  coverMediaId: string | null;
++  coverUrl: string | null;
++  coverAlt: string;
+ }
+ 
+ function Field({ label, children }: { label: string; children: React.ReactNode }) {
+@@ -50,7 +55,7 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
+   function submit(status: EntityFormValues["status"]) {
+     setError(null);
+     startTransition(async () => {
+-      const result = await saveEntity({ ...v, status, coverMediaId: null });
++      const result = await saveEntity({ ...v, status });
+       if (!result.ok) {
+         setError(result.error);
+         return;
+@@ -144,6 +149,37 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
+         ))}
+       </div>
+ 
++      <div>
++        <h2 className="mb-3 text-sm font-medium">Cover image</h2>
++        {v.coverUrl ? (
++          <div className="mb-3 flex items-start gap-3">
++            {/* eslint-disable-next-line @next/next/no-img-element */}
++            <img
++              src={v.coverUrl}
++              alt={v.coverAlt}
++              className="h-24 w-auto rounded-md border border-(--color-border)"
++            />
++            <Button
++              type="button"
++              variant="ghost"
++              size="sm"
++              onClick={() =>
++                setV((p) => ({ ...p, coverMediaId: null, coverUrl: null, coverAlt: "" }))
++              }
++            >
++              Remove
++            </Button>
++          </div>
++        ) : (
++          <MediaUpload
++            label="Upload cover"
++            onUploaded={(m) =>
++              setV((p) => ({ ...p, coverMediaId: m.id, coverUrl: m.url, coverAlt: m.alt }))
++            }
++          />
++        )}
++      </div>
++
+       <div>
+         <h2 className="mb-3 text-sm font-medium">Body</h2>
+         <BlockEditor blocks={v.body} onChange={(body) => set("body", body)} />
+@@ -157,14 +193,20 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
+           Save draft
+         </Button>
+         {v.id ? (
+-          <form
++          <ConfirmButton
+             className="ml-auto"
+-            action={archiveEntity.bind(null, v.id, v.type)}
++            variant="ghost"
++            size="sm"
++            disabled={pending}
++            confirmLabel="Archive it?"
++            onConfirm={() =>
++              startTransition(async () => {
++                await archiveEntity(v.id!, v.type);
++              })
++            }
+           >
+-            <Button type="submit" variant="ghost" size="sm">
+-              Archive
+-            </Button>
+-          </form>
++            Archive
++          </ConfirmButton>
+         ) : null}
+       </div>
+     </div>
+diff --git a/components/studio/media-upload.tsx b/components/studio/media-upload.tsx
+new file mode 100644
+index 0000000..954dc93
+--- /dev/null
++++ b/components/studio/media-upload.tsx
+@@ -0,0 +1,123 @@
++"use client";
++
++import { useRef, useState, useTransition } from "react";
++import { ImagePlus, Loader2 } from "lucide-react";
++import { signUpload } from "@/lib/cloudinary/sign";
++import { registerMedia } from "@/features/entities/actions";
++import {
++  uploadFormData,
++  uploadResponseSchema,
++  uploadUrl,
++  validateFile,
++} from "@/lib/cloudinary/upload";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++
++export interface UploadedMedia {
++  id: string;
++  url: string;
++  alt: string;
++}
++
++/**
++ * Browser -> Cloudinary directly, using a signature minted on the server.
++ * The API secret never reaches the client. Alt text is collected before the
++ * media row is written, because an image without alt text is a broken image.
++ */
++export function MediaUpload({
++  onUploaded,
++  label = "Upload image",
++}: {
++  onUploaded: (media: UploadedMedia) => void;
++  label?: string;
++}) {
++  const inputRef = useRef<HTMLInputElement>(null);
++  const [pending, startTransition] = useTransition();
++  const [error, setError] = useState<string | null>(null);
++  const [alt, setAlt] = useState("");
++
++  function handleFile(file: File) {
++    setError(null);
++
++    const invalid = validateFile(file);
++    if (invalid) return setError(invalid);
++    if (!alt.trim())
++      return setError("Describe the image first — alt text is required.");
++
++    startTransition(async () => {
++      try {
++        const signed = await signUpload();
++
++        const res = await fetch(uploadUrl(signed.cloudName), {
++          method: "POST",
++          body: uploadFormData(file, signed),
++        });
++        const json: unknown = await res.json();
++
++        const parsed = uploadResponseSchema.safeParse(json);
++        if (!parsed.success) {
++          // Cloudinary returns 200-with-error-body in some cases.
++          setError("Cloudinary rejected the upload. Check your credentials.");
++          return;
++        }
++
++        const row = await registerMedia({
++          publicId: parsed.data.public_id,
++          url: parsed.data.secure_url,
++          width: parsed.data.width,
++          height: parsed.data.height,
++          format: parsed.data.format,
++          bytes: parsed.data.bytes,
++          alt: alt.trim(),
++        });
++
++        onUploaded({ id: row.id, url: row.url, alt: row.alt });
++        setAlt("");
++        if (inputRef.current) inputRef.current.value = "";
++      } catch {
++        setError("Upload failed. Is Cloudinary configured?");
++      }
++    });
++  }
++
++  return (
++    <div className="flex flex-col gap-2">
++      <Input
++        value={alt}
++        placeholder="Describe this image (required)"
++        onChange={(e) => setAlt(e.target.value)}
++      />
++      <div className="flex items-center gap-2">
++        <input
++          ref={inputRef}
++          type="file"
++          accept="image/*"
++          className="hidden"
++          onChange={(e) => {
++            const file = e.target.files?.[0];
++            if (file) handleFile(file);
++          }}
++        />
++        <Button
++          type="button"
++          variant="outline"
++          size="sm"
++          disabled={pending}
++          onClick={() => inputRef.current?.click()}
++        >
++          {pending ? (
++            <Loader2 className="size-3.5 animate-spin" />
++          ) : (
++            <ImagePlus className="size-3.5" />
++          )}
++          {pending ? "Uploading…" : label}
++        </Button>
++      </div>
++      {error ? (
++        <p role="alert" className="text-xs text-(--color-ink-muted)">
++          {error}
++        </p>
++      ) : null}
++    </div>
++  );
++}
+diff --git a/features/entities/queries.ts b/features/entities/queries.ts
+index 82c7c11..18dd562 100644
+--- a/features/entities/queries.ts
++++ b/features/entities/queries.ts
+@@ -1,6 +1,6 @@
+ import { and, desc, eq, ne, sql } from "drizzle-orm";
+ import { db } from "@/lib/db";
+-import { entities, type Entity, type EntityType } from "@/lib/db/schema";
++import { entities, media, type Entity, type EntityType, type Media } from "@/lib/db/schema";
+ 
+ const WORKBENCH_LIMIT = 5;
+ 
+@@ -53,3 +53,8 @@ export async function getEntityBySlug(
+     .limit(1);
+   return row;
+ }
++
++export async function getMediaById(id: string): Promise<Media | undefined> {
++  const [row] = await db.select().from(media).where(eq(media.id, id)).limit(1);
++  return row;
++}
+diff --git a/lib/cloudinary/upload.ts b/lib/cloudinary/upload.ts
+new file mode 100644
+index 0000000..f8d7676
+--- /dev/null
++++ b/lib/cloudinary/upload.ts
+@@ -0,0 +1,54 @@
++import { z } from "zod";
++
++/**
++ * Pure helpers for the browser -> Cloudinary hop. Kept out of the "use server"
++ * modules (which may only export async functions) and out of the component,
++ * so the parts that can be tested, are.
++ */
++export function uploadUrl(cloudName: string): string {
++  if (!cloudName) throw new Error("Cloudinary cloud name is missing");
++  return `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
++}
++
++/** Cloudinary returns far more than this. We keep only what we store. */
++export const uploadResponseSchema = z.object({
++  public_id: z.string().min(1),
++  secure_url: z.string().url(),
++  width: z.number().int().positive(),
++  height: z.number().int().positive(),
++  format: z.string().min(1),
++  bytes: z.number().int().nonnegative(),
++});
++
++export type UploadResponse = z.infer<typeof uploadResponseSchema>;
++
++export interface SignedParams {
++  signature: string;
++  timestamp: number;
++  folder: string;
++  apiKey: string;
++  cloudName: string;
++}
++
++/**
++ * The exact field set Cloudinary expects for a signed upload. `folder` and
++ * `timestamp` are signed, so they must be sent verbatim — any drift between
++ * what we sign and what we send yields a 401.
++ */
++export function uploadFormData(file: File, signed: SignedParams): FormData {
++  const fd = new FormData();
++  fd.append("file", file);
++  fd.append("api_key", signed.apiKey);
++  fd.append("timestamp", String(signed.timestamp));
++  fd.append("folder", signed.folder);
++  fd.append("signature", signed.signature);
++  return fd;
++}
++
++export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
++
++export function validateFile(file: File): string | null {
++  if (!file.type.startsWith("image/")) return "That file is not an image.";
++  if (file.size > MAX_UPLOAD_BYTES) return "Images must be under 10 MB.";
++  return null;
++}
+diff --git a/tests/cloudinary-upload.test.ts b/tests/cloudinary-upload.test.ts
+new file mode 100644
+index 0000000..cc635e2
+--- /dev/null
++++ b/tests/cloudinary-upload.test.ts
+@@ -0,0 +1,85 @@
++import { describe, expect, it } from "vitest";
++import {
++  MAX_UPLOAD_BYTES,
++  uploadFormData,
++  uploadResponseSchema,
++  uploadUrl,
++  validateFile,
++} from "@/lib/cloudinary/upload";
++
++const signed = {
++  signature: "abc",
++  timestamp: 1700000000,
++  folder: "persona-os",
++  apiKey: "key",
++  cloudName: "demo",
++};
++
++describe("uploadUrl", () => {
++  it("builds the v1_1 image upload endpoint", () => {
++    expect(uploadUrl("demo")).toBe("https://api.cloudinary.com/v1_1/demo/image/upload");
++  });
++  it("throws rather than posting to a malformed URL", () => {
++    expect(() => uploadUrl("")).toThrow();
++  });
++});
++
++describe("uploadFormData", () => {
++  const file = new File(["x"], "a.png", { type: "image/png" });
++
++  it("sends exactly the signed params, verbatim", () => {
++    const fd = uploadFormData(file, signed);
++    // Drift between signed and sent params is a 401 from Cloudinary.
++    expect(fd.get("timestamp")).toBe(String(signed.timestamp));
++    expect(fd.get("folder")).toBe(signed.folder);
++    expect(fd.get("signature")).toBe(signed.signature);
++    expect(fd.get("api_key")).toBe(signed.apiKey);
++  });
++
++  it("never sends the API secret", () => {
++    const fd = uploadFormData(file, signed);
++    expect([...fd.keys()]).not.toContain("api_secret");
++  });
++});
++
++describe("uploadResponseSchema", () => {
++  it("accepts a real-shaped response", () => {
++    expect(
++      uploadResponseSchema.safeParse({
++        public_id: "persona-os/x",
++        secure_url: "https://res.cloudinary.com/demo/image/upload/x.png",
++        width: 800,
++        height: 600,
++        format: "png",
++        bytes: 1234,
++        extra_field_we_ignore: true,
++      }).success,
++    ).toBe(true);
++  });
++
++  it("rejects an error payload masquerading as success", () => {
++    expect(uploadResponseSchema.safeParse({ error: { message: "nope" } }).success).toBe(false);
++  });
++
++  it("rejects zero-width images", () => {
++    expect(
++      uploadResponseSchema.safeParse({
++        public_id: "a", secure_url: "https://a.co/b.png",
++        width: 0, height: 10, format: "png", bytes: 1,
++      }).success,
++    ).toBe(false);
++  });
++});
++
++describe("validateFile", () => {
++  it("rejects non-images", () => {
++    expect(validateFile(new File(["x"], "a.pdf", { type: "application/pdf" }))).toMatch(/not an image/);
++  });
++  it("rejects oversized images", () => {
++    const big = new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "b.png", { type: "image/png" });
++    expect(validateFile(big)).toMatch(/10 MB/);
++  });
++  it("accepts a normal image", () => {
++    expect(validateFile(new File(["x"], "c.png", { type: "image/png" }))).toBeNull();
++  });
++});
+-- 
+2.43.0
+

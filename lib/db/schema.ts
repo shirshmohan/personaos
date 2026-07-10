@@ -84,8 +84,26 @@ export const ENTITY_TYPES = [
 
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
-export const ENTITY_STATUSES = ["draft", "published"] as const;
+export const ENTITY_STATUSES = ["draft", "published", "archived"] as const;
 export type EntityStatus = (typeof ENTITY_STATUSES)[number];
+
+/** Cloudinary references. We never store bytes, only the public_id. */
+export const media = pgTable("media", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  publicId: text("public_id").notNull().unique(),
+  url: text("url").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  format: text("format").notNull(),
+  bytes: integer("bytes").notNull(),
+  /** Never optional in the UI. Accessibility is a floor, not a polish step. */
+  alt: text("alt").notNull().default(""),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+export type Media = typeof media.$inferSelect;
 
 export const entities = pgTable(
   "entity",
@@ -98,12 +116,21 @@ export const entities = pgTable(
     title: text("title").notNull(),
     summary: text("summary"),
     status: text("status").$type<EntityStatus>().notNull().default("draft"),
+    /** Structured blocks (D20), not markdown. See features/entities/blocks.ts */
+    body: jsonb("body").$type<unknown[]>().notNull().default([]),
+    coverMediaId: text("cover_media_id").references(() => media.id, {
+      onDelete: "set null",
+    }),
     /** Type-specific fields live here until they earn a column. */
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     /** Drives the Timeline (M7). Derived, never stored as a separate table. */
     occurredAt: timestamp("occurred_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow()
+      /** Without this, "Recently edited" silently lies. */
+      .$onUpdate(() => new Date()),
   },
   (t) => [
     uniqueIndex("entity_slug_idx").on(t.slug),

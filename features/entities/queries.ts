@@ -1,6 +1,6 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { entities, type Entity, type EntityType } from "@/lib/db/schema";
+import { entities, media, type Entity, type EntityType, type Media } from "@/lib/db/schema";
 
 const WORKBENCH_LIMIT = 5;
 
@@ -19,6 +19,7 @@ export async function getRecentlyEdited(
   return db
     .select()
     .from(entities)
+    .where(ne(entities.status, "archived"))
     .orderBy(desc(entities.updatedAt))
     .limit(limit);
 }
@@ -37,6 +38,23 @@ export async function listEntitiesByType(type: EntityType): Promise<Entity[]> {
   return db
     .select()
     .from(entities)
-    .where(eq(entities.type, type))
+    .where(and(eq(entities.type, type), ne(entities.status, "archived")))
     .orderBy(desc(entities.updatedAt));
+}
+
+export async function getEntityBySlug(
+  type: EntityType,
+  slug: string,
+): Promise<Entity | undefined> {
+  const [row] = await db
+    .select()
+    .from(entities)
+    .where(and(eq(entities.type, type), eq(entities.slug, slug)))
+    .limit(1);
+  return row;
+}
+
+export async function getMediaById(id: string): Promise<Media | undefined> {
+  const [row] = await db.select().from(media).where(eq(media.id, id)).limit(1);
+  return row;
 }
