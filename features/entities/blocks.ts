@@ -31,6 +31,13 @@ export const blockSchema = z.discriminatedUnion("type", [
     /** Required, never optional. Accessibility is a floor. */
     alt: z.string(),
   }),
+  z.object({
+    id: z.string(),
+    type: z.literal("video"),
+    provider: z.enum(["youtube", "vimeo"]),
+    videoId: z.string().min(1),
+    caption: z.string(),
+  }),
   z.object({ id: z.string(), type: z.literal("divider") }),
 ]);
 
@@ -46,6 +53,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   quote: "Quote",
   code: "Code",
   image: "Image",
+  video: "Video",
   divider: "Divider",
 };
 
@@ -62,6 +70,8 @@ export function newBlock(type: BlockType): Block {
       return { id, type, language: "text", code: "" };
     case "image":
       return { id, type, mediaId: null, url: "", alt: "" };
+    case "video":
+      return { id, type, provider: "youtube", videoId: "", caption: "" };
     case "divider":
       return { id, type };
   }
@@ -74,6 +84,7 @@ export function pruneBlocks(blocks: Body): Body {
       return b.text.trim().length > 0;
     if (b.type === "code") return b.code.trim().length > 0;
     if (b.type === "image") return b.url.trim().length > 0;
+    if (b.type === "video") return b.videoId.trim().length > 0;
     return true;
   });
 }

@@ -27,6 +27,13 @@
   --spacing-gutter: 1.5rem;
   --spacing-section: 6rem;
 
+  /* A deliberate type scale, not ad-hoc sizes. Display carries the page. */
+  --text-hero: clamp(2.75rem, 7vw, 5rem);
+  --text-title: clamp(1.75rem, 3.5vw, 2.5rem);
+
+  /* The system speaks in monospaced labels — an index, a manifest. */
+  --color-hairline: oklch(88% 0.004 264);
+
   /* Restrained motion. */
   --ease-quiet: cubic-bezier(0.22, 1, 0.36, 1);
 }

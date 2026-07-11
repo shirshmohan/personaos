@@ -1,32 +1,29 @@
 import Link from "next/link";
-
-const experiences = [
-  { href: "/career", label: "Career" },
-  { href: "/writing", label: "Writing" },
-  { href: "/travel", label: "Travel" },
-  { href: "/train", label: "Train" },
-  { href: "/library", label: "Library" },
-  { href: "/gallery", label: "Gallery" },
-  { href: "/connect", label: "Connect" },
-];
+import { ENTITY_TYPES, ENTITY_TYPE_META } from "@/features/entities/types";
 
 export default function PublicLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-(--spacing-gutter)">
-      <header className="flex items-center justify-between py-8">
+      <header className="flex items-center justify-between py-6">
         <Link
           href="/"
-          className="font-(family-name:--font-display) text-sm font-medium tracking-tight"
+          className="font-(family-name:--font-display) text-lg tracking-tight"
         >
-          Persona OS
+          Shirsh Mohan
         </Link>
-        {/* Experiences ship in M5 — the nav is intentionally not linked yet. */}
-        <nav aria-label="Experiences">
-          <ul className="flex gap-5 text-sm text-(--color-ink-muted)">
-            {experiences.slice(0, 3).map((e) => (
-              <li key={e.href}>{e.label}</li>
+        <nav aria-label="Sections">
+          <ul className="flex gap-4 font-(family-name:--font-mono) text-xs text-(--color-ink-muted) uppercase">
+            {ENTITY_TYPES.slice(0, 4).map((type) => (
+              <li key={type}>
+                <Link
+                  href={`/${type}`}
+                  className="transition-colors hover:text-(--color-ink)"
+                >
+                  {ENTITY_TYPE_META[type].label}
+                </Link>
+              </li>
             ))}
           </ul>
         </nav>
@@ -34,8 +31,9 @@ export default function PublicLayout({
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-(--color-border) py-8 text-sm text-(--color-ink-muted)">
-        Designed, engineered, and continuously evolving.
+      <footer className="mt-24 flex items-center justify-between border-t border-(--color-hairline) py-8 font-(family-name:--font-mono) text-xs text-(--color-ink-muted)">
+        <span>Persona OS</span>
+        <span>Designed &amp; engineered by its subject</span>
       </footer>
     </div>
   );

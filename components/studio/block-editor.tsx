@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MediaUpload } from "./media-upload";
+import { parseVideoUrl } from "@/features/entities/video";
 
-const ORDER: BlockType[] = ["paragraph", "heading", "quote", "code", "image", "divider"];
+const ORDER: BlockType[] = ["paragraph", "heading", "quote", "code", "image", "video", "divider"];
 
 export function BlockEditor({
   blocks,
@@ -134,6 +135,33 @@ export function BlockEditor({
                   }
                 />
               )}
+            </div>
+          ) : null}
+
+          {block.type === "video" ? (
+            <div className="flex flex-col gap-2">
+              <Input
+                defaultValue={block.videoId ? `${block.provider}:${block.videoId}` : ""}
+                placeholder="Paste a YouTube or Vimeo link"
+                onChange={(e) => {
+                  const parsed = parseVideoUrl(e.target.value);
+                  if (parsed) update(block.id, { provider: parsed.provider, videoId: parsed.videoId });
+                }}
+              />
+              {block.videoId ? (
+                <p className="text-xs text-(--color-ink-muted)">
+                  {block.provider} · {block.videoId}
+                </p>
+              ) : (
+                <p className="text-xs text-(--color-ink-muted)">
+                  Paste the full link; we extract the embed.
+                </p>
+              )}
+              <Input
+                value={block.caption}
+                placeholder="Caption (optional)"
+                onChange={(e) => update(block.id, { caption: e.target.value })}
+              />
             </div>
           ) : null}
 

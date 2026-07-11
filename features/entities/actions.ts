@@ -8,6 +8,10 @@ import { entities, media } from "@/lib/db/schema";
 import { requireOwner } from "@/lib/auth/guard";
 import { entityInputSchema, METADATA_SCHEMAS, type EntityInput } from "./schemas";
 import { pruneBlocks } from "./blocks";
+import { syncEntityTags } from "./tags";
+import { describeIssue } from "./errors";
+import { genreToTag } from "./genres";
+import { techToTag } from "./tech";
 
 export type ActionResult =
   | { ok: true; slug: string }
@@ -31,13 +35,13 @@ export async function saveEntity(input: EntityInput): Promise<ActionResult> {
 
   const parsed = entityInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    return { ok: false, error: describeIssue(parsed.error.issues[0]) };
   }
   const data = parsed.data;
 
   const meta = METADATA_SCHEMAS[data.type].safeParse(data.metadata);
   if (!meta.success) {
-    return { ok: false, error: meta.error.issues[0]?.message ?? "Invalid fields" };
+    return { ok: false, error: describeIssue(meta.error.issues[0]) };
   }
 
   // The DB index would reject this anyway; catching it here lets us say
@@ -58,11 +62,25 @@ export async function saveEntity(input: EntityInput): Promise<ActionResult> {
     metadata: meta.data as Record<string, unknown>,
   };
 
-  if (data.id) {
-    await db.update(entities).set(values).where(eq(entities.id, data.id));
+  let entityId = data.id;
+  if (entityId) {
+    await db.update(entities).set(values).where(eq(entities.id, entityId));
   } else {
-    await db.insert(entities).values(values);
+    const [row] = await db.insert(entities).values(values).returning({ id: entities.id });
+    entityId = row.id;
   }
+
+  // Genre lives in the tag system under a namespace (D35), so "show all
+  // Fantasy" reuses the M4 tag queries. Merge the picked genres into tags.
+  const genreValues = Array.isArray(meta.data && (meta.data as Record<string, unknown>).genre)
+    ? ((meta.data as Record<string, unknown>).genre as string[])
+    : [];
+  const genreTags = genreValues.map((g) => genreToTag(g));
+  const techValues = Array.isArray((meta.data as Record<string, unknown>).tech)
+    ? ((meta.data as Record<string, unknown>).tech as string[])
+    : [];
+  const techTags = techValues.map((t) => techToTag(t));
+  await syncEntityTags(entityId, [...data.tags, ...genreTags, ...techTags]);
 
   revalidatePath("/studio");
   revalidatePath(`/studio/${data.type}`);

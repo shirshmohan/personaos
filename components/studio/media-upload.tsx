@@ -12,6 +12,7 @@ import {
 } from "@/lib/cloudinary/upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cloudinaryError } from "@/lib/cloudinary/upload";
 
 export interface UploadedMedia {
   id: string;
@@ -56,8 +57,9 @@ export function MediaUpload({
 
         const parsed = uploadResponseSchema.safeParse(json);
         if (!parsed.success) {
-          // Cloudinary returns 200-with-error-body in some cases.
-          setError("Cloudinary rejected the upload. Check your credentials.");
+          // Cloudinary tells you exactly what is wrong. Say it, rather than
+          // guessing "check your credentials" at a bad cloud name.
+          setError(cloudinaryError(json));
           return;
         }
 

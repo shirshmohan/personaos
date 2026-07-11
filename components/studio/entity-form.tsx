@@ -3,18 +3,22 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Block } from "@/features/entities/blocks";
-import { ENTITY_FIELDS } from "@/features/entities/schemas";
+import { ENTITY_FIELDS, SUMMARY_MAX, TITLE_MAX } from "@/features/entities/schemas";
 import { slugify } from "@/features/entities/slug";
 import { saveEntity, archiveEntity } from "@/features/entities/actions";
 import type { EntityType } from "@/features/entities/types";
 import { BlockEditor } from "./block-editor";
 import { MediaUpload } from "./media-upload";
 import { ConfirmButton } from "@/components/shared/confirm-button";
+import { TagCombobox } from "./tag-combobox";
+import { MultiSelect } from "./multi-select";
+import { TechInput } from "./tech-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export interface EntityFormValues {
   id?: string;
@@ -29,6 +33,7 @@ export interface EntityFormValues {
   coverMediaId: string | null;
   coverUrl: string | null;
   coverAlt: string;
+  tags: string[];
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -40,7 +45,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function EntityForm({ initial }: { initial: EntityFormValues }) {
+export function EntityForm({ initial, tagVocabulary = [] }: { initial: EntityFormValues; tagVocabulary?: string[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,11 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
 
   const set = <K extends keyof EntityFormValues>(k: K, value: EntityFormValues[K]) =>
     setV((p) => ({ ...p, [k]: value }));
+
+  // Catch it here rather than after a server round-trip.
+  const summaryOver = v.summary.length > SUMMARY_MAX;
+  const titleOver = v.title.length > TITLE_MAX;
+  const invalid = summaryOver || titleOver || v.title.trim() === "";
 
   function submit(status: EntityFormValues["status"]) {
     setError(null);
@@ -112,14 +122,38 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
           <Field label="Summary">
             <Textarea
               rows={2}
+              aria-invalid={summaryOver}
               value={v.summary}
               onChange={(e) => set("summary", e.target.value)}
             />
           </Field>
+          {/* A hard cap with no feedback is a trap. Show the count as it nears. */}
+          {v.summary.length > SUMMARY_MAX - 50 ? (
+            <p
+              className={cn(
+                "mt-1 text-xs tabular-nums",
+                summaryOver ? "text-(--color-ink)" : "text-(--color-ink-muted)",
+              )}
+            >
+              {v.summary.length} / {SUMMARY_MAX}
+              {summaryOver ? " — move the detail into the body below" : null}
+            </p>
+          ) : null}
         </div>
 
         {/* Type-specific fields, rendered from the descriptors. */}
         {ENTITY_FIELDS[v.type].map((f) => (
+          f.kind === "multiselect" ? (
+            <div key={f.name} className="sm:col-span-2">
+              <Field label={f.label + (f.required ? " *" : "")}>
+                <MultiSelect
+                  options={f.options ?? []}
+                  value={Array.isArray(v.metadata[f.name]) ? (v.metadata[f.name] as string[]) : []}
+                  onChange={(next) => set("metadata", { ...v.metadata, [f.name]: next })}
+                />
+              </Field>
+            </div>
+          ) : (
           <Field key={f.name} label={f.label + (f.required ? " *" : "")}>
             {f.kind === "select" ? (
               <Select
@@ -146,7 +180,27 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
               />
             )}
           </Field>
+          )
         ))}
+      </div>
+
+      {v.type === "projects" ? (
+        <div>
+          <h2 className="mb-3 text-sm font-medium">Tech stack</h2>
+          <TechInput
+            value={Array.isArray(v.metadata.tech) ? (v.metadata.tech as string[]) : []}
+            onChange={(tech) => set("metadata", { ...v.metadata, tech })}
+          />
+        </div>
+      ) : null}
+
+      <div>
+        <h2 className="mb-3 text-sm font-medium">Tags</h2>
+        <TagCombobox
+          value={v.tags}
+          vocabulary={tagVocabulary}
+          onChange={(tags) => set("tags", tags)}
+        />
       </div>
 
       <div>
@@ -186,10 +240,14 @@ export function EntityForm({ initial }: { initial: EntityFormValues }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-(--color-border) pt-6">
-        <Button disabled={pending} onClick={() => submit("published")}>
+        <Button disabled={pending || invalid} onClick={() => submit("published")}>
           {pending ? "Saving…" : "Publish"}
         </Button>
-        <Button variant="outline" disabled={pending} onClick={() => submit("draft")}>
+        <Button
+          variant="outline"
+          disabled={pending || invalid}
+          onClick={() => submit("draft")}
+        >
           Save draft
         </Button>
         {v.id ? (

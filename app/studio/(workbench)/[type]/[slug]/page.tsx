@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityForm } from "@/components/studio/entity-form";
-import { getEntityBySlug, getMediaById } from "@/features/entities/queries";
+import {
+  getEntityBySlug,
+  getMediaById,
+  getRelationshipsFor,
+} from "@/features/entities/queries";
+import { getEntityTags, getTagVocabulary } from "@/features/entities/tags";
+import { RelationshipEditor } from "@/components/studio/relationship-editor";
 import { isEntityType } from "@/features/entities/types";
 import { bodySchema } from "@/features/entities/blocks";
 
@@ -18,9 +24,12 @@ export default async function EditEntityPage({
 
   // Body is jsonb — trust nothing that came out of a JSONB column.
   const body = bodySchema.safeParse(entity.body);
-  const cover = entity.coverMediaId
-    ? await getMediaById(entity.coverMediaId)
-    : undefined;
+  const [cover, entityTagNames, relationships, tagVocabulary] = await Promise.all([
+    entity.coverMediaId ? getMediaById(entity.coverMediaId) : undefined,
+    getEntityTags(entity.id),
+    getRelationshipsFor(entity.id),
+    getTagVocabulary(),
+  ]);
 
   return (
     <>
@@ -44,8 +53,15 @@ export default async function EditEntityPage({
           coverMediaId: entity.coverMediaId,
           coverUrl: cover?.url ?? null,
           coverAlt: cover?.alt ?? "",
+          tags: entityTagNames,
         }}
+        tagVocabulary={tagVocabulary}
       />
+
+      <section className="mt-12 border-t border-(--color-border) pt-8">
+        <h2 className="mb-4 text-sm font-medium">Relationships</h2>
+        <RelationshipEditor entityId={entity.id} initial={relationships} />
+      </section>
     </>
   );
 }

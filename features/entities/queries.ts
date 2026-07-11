@@ -1,6 +1,13 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { entities, media, type Entity, type EntityType, type Media } from "@/lib/db/schema";
+import {
+  entities,
+  media,
+  relationships,
+  type Entity,
+  type EntityType,
+  type Media,
+} from "@/lib/db/schema";
 
 const WORKBENCH_LIMIT = 5;
 
@@ -57,4 +64,45 @@ export async function getEntityBySlug(
 export async function getMediaById(id: string): Promise<Media | undefined> {
   const [row] = await db.select().from(media).where(eq(media.id, id)).limit(1);
   return row;
+}
+
+
+/** Powers the relationship picker. Excludes archived and the entity itself. */
+export async function searchEntities(
+  query: string,
+  excludeId?: string,
+): Promise<Entity[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const conds = [
+    ne(entities.status, "archived"),
+    or(ilike(entities.title, `%${q}%`), ilike(entities.slug, `%${q}%`)),
+  ];
+  if (excludeId) conds.push(ne(entities.id, excludeId));
+  return db.select().from(entities).where(and(...conds)).limit(8);
+}
+
+export async function getArchived(): Promise<Entity[]> {
+  return db
+    .select()
+    .from(entities)
+    .where(eq(entities.status, "archived"))
+    .orderBy(desc(entities.updatedAt));
+}
+
+export async function getRelationshipsFor(entityId: string) {
+  const rows = await db
+    .select({ rel: relationships, entity: entities })
+    .from(relationships)
+    .innerJoin(
+      entities,
+      or(
+        and(eq(relationships.fromEntityId, entityId), eq(entities.id, relationships.toEntityId)),
+        and(eq(relationships.toEntityId, entityId), eq(entities.id, relationships.fromEntityId)),
+      )!,
+    )
+    .where(
+      or(eq(relationships.fromEntityId, entityId), eq(relationships.toEntityId, entityId)),
+    );
+  return rows.map((r) => ({ id: r.rel.id, type: r.rel.type, entity: r.entity }));
 }

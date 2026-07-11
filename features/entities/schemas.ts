@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { bodySchema } from "./blocks";
 import { ENTITY_STATUSES, type EntityType } from "@/lib/db/schema";
+import { GENRES } from "./genres";
 
 /**
  * Field descriptors are the single source of truth (Rule 5, applied to forms).
  * The Zod validator and the rendered form are BOTH derived from this list, so
  * they cannot drift. Add a field here and it appears in the editor, validated.
  */
-export type FieldKind = "text" | "url" | "date" | "select";
+export type FieldKind = "text" | "url" | "date" | "select" | "multiselect";
 
 export interface FieldDef {
   name: string;
@@ -40,11 +41,23 @@ export const ENTITY_FIELDS: Record<EntityType, readonly FieldDef[]> = {
     { name: "pattern", label: "Pattern", kind: "text", placeholder: "Two pointers, DP…" },
   ],
   library: [
-    { name: "author", label: "Author", kind: "text", required: true },
-    { name: "readingStatus", label: "Status", kind: "select", options: ["Reading", "Finished", "Abandoned"] },
+    { name: "category", label: "Category", kind: "select", required: true,
+      options: ["Manhwa", "Manga", "Series", "Book"] },
+    { name: "tier", label: "Tier", kind: "select",
+      options: ["S", "A", "B", "C", "D", "F"] },
+    { name: "author", label: "Author / Studio", kind: "text" },
+    { name: "readingStatus", label: "Status", kind: "select",
+      options: ["Reading", "Finished", "Dropped", "Planned"] },
+    { name: "genre", label: "Genre", kind: "multiselect", options: GENRES },
   ],
   gallery: [
     { name: "medium", label: "Medium", kind: "text" },
+  ],
+  projects: [
+    { name: "repoUrl", label: "GitHub repo", kind: "url", required: true },
+    { name: "deployedUrl", label: "Live link", kind: "url" },
+    { name: "role", label: "Your role", kind: "text", placeholder: "Solo, lead, contributor…" },
+    // tech is a FREE tag field (D42), rendered by TechInput — not a fixed descriptor here.
   ],
 };
 
@@ -53,6 +66,11 @@ function zodForFields(fields: readonly FieldDef[]) {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const f of fields) {
     let s: z.ZodTypeAny;
+    if (f.kind === "multiselect" && f.options) {
+      // A multiselect is an array of allowed values; empty array is fine.
+      shape[f.name] = z.array(z.enum(f.options as [string, ...string[]])).default([]);
+      continue;
+    }
     if (f.kind === "url") s = z.string().url();
     else if (f.kind === "select" && f.options)
       s = z.enum(f.options as [string, ...string[]]);
@@ -73,17 +91,22 @@ export const METADATA_SCHEMAS = Object.fromEntries(
 /** What the editor submits. */
 export const entityInputSchema = z.object({
   id: z.string().optional(),
-  type: z.enum(["career", "writing", "travel", "train", "library", "gallery"]),
-  title: z.string().min(1, "Title is required").max(200),
+  type: z.enum(["career", "writing", "travel", "train", "library", "gallery", "projects"]),
+  title: z.string().min(1, "Title is required").max(200, "Title must be 200 characters or fewer"),
   slug: z
     .string()
     .min(1, "Slug is required")
     .regex(/^[a-z0-9-]+$/, "Lowercase letters, numbers, and hyphens only"),
-  summary: z.string().max(500).optional().or(z.literal("")),
+  summary: z
+    .string()
+    .max(500, "Summary must be 500 characters or fewer — put the detail in the body")
+    .optional()
+    .or(z.literal("")),
   status: z.enum(ENTITY_STATUSES),
   body: bodySchema,
   occurredAt: z.string().optional().or(z.literal("")),
   coverMediaId: z.string().nullable().optional(),
+  tags: z.array(z.string().min(1)).max(20).default([]),
   metadata: z.record(z.string(), z.unknown()),
 });
 
@@ -95,3 +118,6 @@ export function validateEntity(input: EntityInput) {
   if (!base.success) return base;
   return METADATA_SCHEMAS[input.type].safeParse(input.metadata);
 }
+
+export const SUMMARY_MAX = 500;
+export const TITLE_MAX = 200;

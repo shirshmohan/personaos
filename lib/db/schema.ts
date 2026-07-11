@@ -1,5 +1,5 @@
 import {
-  boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -9,6 +9,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 
 /* -------------------------------------------------------------------------- */
@@ -80,6 +81,7 @@ export const ENTITY_TYPES = [
   "train", // D11: the DSA / practice log
   "library",
   "gallery",
+  "projects", // D41
 ] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];
@@ -140,3 +142,75 @@ export const entities = pgTable(
 
 export type Entity = typeof entities.$inferSelect;
 export type NewEntity = typeof entities.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* Relationships — Rule 8: relationships power the site.                      */
+/*                                                                            */
+/* Stored once, directionally (A -> B), but queried from both ends. The Atlas */
+/* (M6) is a view over this table; it stores nothing of its own.              */
+/* -------------------------------------------------------------------------- */
+
+export const RELATIONSHIP_TYPES = [
+  "related_to",
+  "part_of",
+  "inspired_by",
+  "located_at",
+  "references",
+] as const;
+
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+export const relationships = pgTable(
+  "relationship",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    fromEntityId: text("from_entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+    toEntityId: text("to_entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+    type: text("type").$type<RelationshipType>().notNull().default("related_to"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The same edge twice is meaningless.
+    uniqueIndex("relationship_edge_idx").on(t.fromEntityId, t.toEntityId, t.type),
+    // Both directions get an index; the Atlas walks the graph from either end.
+    index("relationship_from_idx").on(t.fromEntityId),
+    index("relationship_to_idx").on(t.toEntityId),
+    // An entity related to itself is a bug, enforced by the database.
+    check("relationship_no_self_link", sql`${t.fromEntityId} <> ${t.toEntityId}`),
+  ],
+);
+
+export type Relationship = typeof relationships.$inferSelect;
+
+/* -------------------------------------------------------------------------- */
+/* Tags — cross-cutting labels. Search (M8) wants these.                       */
+/* -------------------------------------------------------------------------- */
+
+export const tags = pgTable("tag", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+});
+
+export type Tag = typeof tags.$inferSelect;
+
+export const entityTags = pgTable(
+  "entity_tag",
+  {
+    entityId: text("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.entityId, t.tagId] })],
+);

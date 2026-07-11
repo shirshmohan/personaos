@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityForm } from "@/components/studio/entity-form";
 import { ENTITY_TYPE_META, isEntityType } from "@/features/entities/types";
+import { getTagVocabulary } from "@/features/entities/tags";
 
 export default async function NewEntityPage({
   params,
@@ -10,6 +11,8 @@ export default async function NewEntityPage({
 }) {
   const { type } = await params;
   if (!isEntityType(type)) notFound();
+
+  const tagVocabulary = await getTagVocabulary();
 
   return (
     <>
@@ -27,7 +30,9 @@ export default async function NewEntityPage({
           coverMediaId: null,
           coverUrl: null,
           coverAlt: "",
+          tags: [],
         }}
+        tagVocabulary={tagVocabulary}
       />
     </>
   );

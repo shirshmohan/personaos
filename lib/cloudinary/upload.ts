@@ -5,9 +5,23 @@ import { z } from "zod";
  * modules (which may only export async functions) and out of the component,
  * so the parts that can be tested, are.
  */
+const CLOUD_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+
 export function uploadUrl(cloudName: string): string {
   if (!cloudName) throw new Error("Cloudinary cloud name is missing");
+  // A malformed name silently produced a 401 that read like a credentials bug.
+  if (!CLOUD_NAME_RE.test(cloudName)) {
+    throw new Error(`Invalid Cloudinary cloud name: "${cloudName}"`);
+  }
   return `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+}
+
+/** Cloudinary returns { error: { message } }. Show it verbatim. */
+export function cloudinaryError(payload: unknown): string {
+  const msg = (payload as { error?: { message?: unknown } } | null)?.error?.message;
+  return typeof msg === "string" && msg.length > 0
+    ? `Cloudinary: ${msg}`
+    : "Cloudinary rejected the upload.";
 }
 
 /** Cloudinary returns far more than this. We keep only what we store. */

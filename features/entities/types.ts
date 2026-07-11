@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  Boxes,
   Briefcase,
   Image,
   MapPin,
@@ -47,6 +48,11 @@ export const ENTITY_TYPE_META: Record<
     label: "Gallery",
     icon: Image,
     blurb: "Visual and design work.",
+  },
+  projects: {
+    label: "Projects",
+    icon: Boxes,
+    blurb: "Things built — with the repo, the stack, and the story.",
   },
 };
 
