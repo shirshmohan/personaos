@@ -77,9 +77,15 @@ function zodForFields(fields: readonly FieldDef[]) {
     else s = z.string();
 
     // Empty strings mean "not filled in", never a validation error.
-    shape[f.name] = f.required
-      ? z.string().min(1, `${f.label} is required`)
-      : s.optional().or(z.literal(""));
+    if (f.required) {
+      // A required URL must be a real URL, not merely non-empty.
+      shape[f.name] =
+        f.kind === "url"
+          ? z.string().url(`${f.label} must be a valid URL`)
+          : z.string().min(1, `${f.label} is required`);
+    } else {
+      shape[f.name] = s.optional().or(z.literal(""));
+    }
   }
   return z.object(shape);
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
+import { getTheme } from "@/features/theme/server";
 
 /**
  * Instrument Serif carries the display voice. Self-hosted at build time by
@@ -24,11 +25,12 @@ export const metadata: Metadata = {
     "A personal operating system that happens to have a public face.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const theme = await getTheme();
   return (
-    <html lang="en" className={instrumentSerif.variable}>
+    <html lang="en" data-theme={theme} className={instrumentSerif.variable}>
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );

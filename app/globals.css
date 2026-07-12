@@ -44,6 +44,7 @@
   }
 
   html {
+    scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -69,4 +70,54 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Themes. The @theme block above defines the DEFAULT (Paper). Each theme below
+ * overrides the same tokens on [data-theme="…"]. Persisted via cookie so the
+ * server renders the right one — no flash of the wrong theme on load.
+ * ------------------------------------------------------------------------- */
+
+[data-theme="ink"] {
+  --color-surface: oklch(18% 0.006 264);
+  --color-surface-sunken: oklch(22% 0.007 264);
+  --color-border: oklch(30% 0.008 264);
+  --color-hairline: oklch(27% 0.007 264);
+  --color-ink: oklch(93% 0.008 90);
+  --color-ink-muted: oklch(66% 0.010 264);
+  --color-accent: oklch(72% 0.13 250);
+  color-scheme: dark;
+}
+
+[data-theme="slate"] {
+  --color-surface: oklch(22% 0.02 250);
+  --color-surface-sunken: oklch(26% 0.022 250);
+  --color-border: oklch(34% 0.024 250);
+  --color-hairline: oklch(31% 0.022 250);
+  --color-ink: oklch(92% 0.012 240);
+  --color-ink-muted: oklch(68% 0.02 245);
+  --color-accent: oklch(74% 0.12 200);
+  color-scheme: dark;
+}
+
+[data-theme="cream"] {
+  --color-surface: oklch(96% 0.018 80);
+  --color-surface-sunken: oklch(93% 0.022 78);
+  --color-border: oklch(85% 0.025 78);
+  --color-hairline: oklch(88% 0.022 78);
+  --color-ink: oklch(30% 0.02 60);
+  --color-ink-muted: oklch(50% 0.025 62);
+  --color-accent: oklch(52% 0.11 40);
+  color-scheme: light;
+}
+
+[data-theme="midnight"] {
+  --color-surface: oklch(20% 0.03 265);
+  --color-surface-sunken: oklch(24% 0.035 265);
+  --color-border: oklch(33% 0.04 265);
+  --color-hairline: oklch(30% 0.038 265);
+  --color-ink: oklch(92% 0.015 260);
+  --color-ink-muted: oklch(68% 0.03 262);
+  --color-accent: oklch(74% 0.13 285);
+  color-scheme: dark;
 }
