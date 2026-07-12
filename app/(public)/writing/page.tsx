@@ -8,7 +8,7 @@ export default async function WritingList() {
   const posts = await listPublished("writing");
 
   return (
-    <div className="py-(--spacing-section)">
+    <div className="mx-auto max-w-3xl py-(--spacing-section)">
       <header className="mb-16">
         <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">
           Writing

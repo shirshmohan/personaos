@@ -20,7 +20,7 @@ function range(start: string | null, end: string | null): string {
 export default async function CareerPage() {
   const roles = await listCareer();
   return (
-    <div className="py-(--spacing-section)">
+    <div className="mx-auto max-w-3xl py-(--spacing-section)">
       <header className="mb-16">
         <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">Career</p>
         <h1 className="font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight">The work so far</h1>

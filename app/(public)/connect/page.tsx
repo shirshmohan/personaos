@@ -2,7 +2,7 @@ export const metadata = { title: "Connect" };
 
 export default function ConnectPage() {
   return (
-    <div className="py-(--spacing-section)">
+    <div className="mx-auto max-w-3xl py-(--spacing-section)">
       <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">Connect</p>
       <h1 className="max-w-2xl font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight text-balance">
         Say hello

@@ -7,7 +7,7 @@ export const metadata = { title: "Gallery" };
 export default async function List() {
   const items = await listPublished("gallery");
   return (
-    <div className="py-(--spacing-section)">
+    <div className="mx-auto max-w-3xl py-(--spacing-section)">
       <header className="mb-16">
         <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">Gallery</p>
         <h1 className="font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight">Made things</h1>

@@ -9,7 +9,7 @@ export default async function PublicLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const theme = await getTheme();
   return (
-    <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-(--spacing-gutter)">
+    <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-(--spacing-gutter)">
       <header className="flex items-center justify-between py-6">
         <Link
           href="/"

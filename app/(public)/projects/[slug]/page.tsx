@@ -37,7 +37,7 @@ export default async function ProjectDetail({ params }: { params: Promise<{ slug
   const live = typeof meta.deployedUrl === "string" ? meta.deployedUrl : null;
 
   return (
-    <article className="py-(--spacing-section)">
+    <article className="mx-auto max-w-3xl py-(--spacing-section)">
       <h1 className="font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight text-balance">{project.title}</h1>
       {project.summary ? (
         <p className="mt-4 max-w-prose text-lg leading-relaxed text-(--color-ink-muted) text-pretty">{project.summary}</p>

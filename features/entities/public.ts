@@ -247,3 +247,25 @@ export async function getPreview(
     .limit(limit);
   return rows.map((r) => toEntityRefDTO(r.entity, r.cover));
 }
+
+export interface RichPreview extends EntityRefDTO {
+  meta: Record<string, unknown>;
+  genres: string[];
+}
+
+export async function getRichPreview(type: EntityType): Promise<RichPreview | null> {
+  const [row] = await db
+    .select({ entity: entities, cover: media })
+    .from(entities)
+    .leftJoin(media, eq(entities.coverMediaId, media.id))
+    .where(and(eq(entities.type, type), PUBLISHED))
+    .orderBy(desc(sql`coalesce(${entities.occurredAt}, ${entities.updatedAt})`))
+    .limit(1);
+  if (!row) return null;
+  const m = (row.entity.metadata ?? {}) as Record<string, unknown>;
+  return {
+    ...toEntityRefDTO(row.entity, row.cover),
+    meta: m,
+    genres: Array.isArray(m.genre) ? (m.genre as string[]) : [],
+  };
+}

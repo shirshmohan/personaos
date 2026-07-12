@@ -8,7 +8,7 @@ export default async function LibraryPage() {
   const items = await listLibrary();
 
   return (
-    <div className="py-(--spacing-section)">
+    <div className="mx-auto max-w-3xl py-(--spacing-section)">
       <header className="mb-16">
         <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">
           Library

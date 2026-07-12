@@ -37,7 +37,7 @@ export default async function WritingArticle({
     typeof post.metadata.subtitle === "string" ? post.metadata.subtitle : null;
 
   return (
-    <article className="py-(--spacing-section)">
+    <article className="mx-auto max-w-3xl py-(--spacing-section)">
       <header className="mb-12">
         <h1 className="max-w-3xl font-(family-name:--font-display) text-[length:var(--text-title)] leading-[1.1] tracking-tight text-balance">
           {post.title}

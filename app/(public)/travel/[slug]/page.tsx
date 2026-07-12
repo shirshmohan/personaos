@@ -20,7 +20,7 @@ export default async function Detail({ params }: { params: Promise<{ slug: strin
   if (!e) notFound();
   const related = await getRelatedBySlug("travel", slug);
   return (
-    <article className="py-(--spacing-section)">
+    <article className="mx-auto max-w-3xl py-(--spacing-section)">
       {e.cover ? (
         <div className="mb-8 overflow-hidden rounded-xl border border-(--color-hairline)">
           {/* eslint-disable-next-line @next/next/no-img-element */}

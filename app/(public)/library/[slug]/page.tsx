@@ -39,7 +39,7 @@ export default async function LibraryDetail({
   const genres = Array.isArray(meta.genre) ? (meta.genre as string[]) : [];
 
   return (
-    <article className="py-(--spacing-section)">
+    <article className="mx-auto max-w-3xl py-(--spacing-section)">
       <div className="flex flex-col gap-8 sm:flex-row sm:gap-12">
         {item.cover ? (
           <div className="sm:w-56 sm:shrink-0">
