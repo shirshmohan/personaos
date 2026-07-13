@@ -1,4 +1,5 @@
 import {
+  boolean,
   check,
   index,
   integer,
@@ -213,4 +214,75 @@ export const entityTags = pgTable(
       .references(() => tags.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.entityId, t.tagId] })],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Train — patterns are entities (D50). Problems are data under them (D28).    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The full public LeetCode catalog (D51) — a read-only reference, seeded once
+ * from the public GraphQL. No auth. Adding a solved problem searches THIS and
+ * copies the row into `problem`, so nothing is re-fetched at read time.
+ */
+export const leetcodeProblems = pgTable(
+  "leetcode_problem",
+  {
+    slug: text("slug").primaryKey(), // titleSlug, e.g. "two-sum"
+    frontendId: integer("frontend_id"), // the displayed number
+    title: text("title").notNull(),
+    difficulty: text("difficulty").notNull(), // Easy | Medium | Hard
+    topicTags: jsonb("topic_tags").$type<string[]>().notNull().default([]),
+    paidOnly: boolean("paid_only").notNull().default(false),
+  },
+  (t) => [index("leetcode_problem_title_idx").on(t.title)],
+);
+
+export type LeetcodeProblem = typeof leetcodeProblems.$inferSelect;
+
+/**
+ * A problem YOU'VE solved (D52). Auto-filled from the catalog; the only fields
+ * you add are: important flag, your own difficulty rating, comment. Patterns are
+ * attached via `problemPattern` (D53, many-to-many). No cover/body/summary.
+ */
+export const problems = pgTable(
+  "problem",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    leetcodeSlug: text("leetcode_slug")
+      .notNull()
+      .references(() => leetcodeProblems.slug),
+    // Denormalised snapshot so the list renders without joining the catalog.
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    difficulty: text("difficulty").notNull(),
+    important: boolean("important").notNull().default(false),
+    myRating: integer("my_rating"), // your own 1–5 difficulty, optional
+    comment: text("comment"),
+    solvedAt: timestamp("solved_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("problem_leetcode_slug_idx").on(t.leetcodeSlug), // one row per problem
+    index("problem_important_idx").on(t.important),
+  ],
+);
+
+export type Problem = typeof problems.$inferSelect;
+
+/**
+ * A problem ↔ pattern link (D53). A pattern is a Train ENTITY (D50), so this
+ * points at entities.id. Many-to-many: a problem can carry several patterns,
+ * and "Stack" ≠ "Monotonic Stack" — you assign the true one.
+ */
+export const problemPatterns = pgTable(
+  "problem_pattern",
+  {
+    problemId: text("problem_id")
+      .notNull()
+      .references(() => problems.id, { onDelete: "cascade" }),
+    patternEntityId: text("pattern_entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.problemId, t.patternEntityId] })],
 );

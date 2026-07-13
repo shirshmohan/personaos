@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid, ListChecks } from "lucide-react";
 import { ENTITY_TYPES, ENTITY_TYPE_META } from "@/features/entities/types";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,11 @@ export function StudioSidebar() {
       <NavLink href="/studio" active={pathname === "/studio"}>
         <LayoutGrid aria-hidden className="size-4" strokeWidth={1.75} />
         Workbench
+      </NavLink>
+
+      <NavLink href="/studio/train-problems" active={pathname.startsWith("/studio/train-problems")}>
+        <ListChecks aria-hidden className="size-4" strokeWidth={1.75} />
+        Problems
       </NavLink>
 
       <div>

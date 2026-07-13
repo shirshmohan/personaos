@@ -22,6 +22,13 @@
       "when": 1783655896974,
       "tag": "0002_bored_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783914154572,
+      "tag": "0003_fair_maelstrom",
+      "breakpoints": true
     }
   ]
 }
