@@ -1,39 +1,74 @@
 import { notFound } from "next/navigation";
 import { getPublished, getRelatedBySlug } from "@/features/entities/public";
+import { getPatternProblems } from "@/features/train/public";
 import { BlockRenderer } from "@/components/public/block-renderer";
-import { Related } from "@/components/public/related";
 import { MiniAtlas } from "@/components/public/mini-atlas";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const e = await getPublished("train", slug);
-  if (!e) return { title: "Not found" };
-  return { title: e.title, description: e.summary ?? undefined,
-    openGraph: e.cover ? { images: [{ url: e.cover.url }] } : undefined };
+  return { title: e?.title ?? "Pattern" };
 }
 
-export default async function Detail({ params }: { params: Promise<{ slug: string }> }) {
+const diffColor: Record<string, string> = {
+  Easy: "text-green-500", Medium: "text-amber-500", Hard: "text-red-500",
+};
+
+export default async function PatternPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const e = await getPublished("train", slug);
-  if (!e) notFound();
-  const related = await getRelatedBySlug("train", slug);
+  const pattern = await getPublished("train", slug);
+  if (!pattern) notFound();
+  const problems = await getPatternProblems(slug);
+
   return (
     <article className="mx-auto max-w-3xl py-(--spacing-section)">
-      {e.cover ? (
-        <div className="mb-8 overflow-hidden rounded-xl border border-(--color-hairline)">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={e.cover.url} alt={e.cover.alt} className="w-full" />
-        </div>
+      <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">Pattern</p>
+      <h1 className="font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight text-balance">
+        {pattern.title}
+      </h1>
+      {pattern.summary ? (
+        <p className="mt-4 max-w-prose text-lg leading-relaxed text-(--color-ink-muted) text-pretty">{pattern.summary}</p>
       ) : null}
-      <h1 className="max-w-3xl font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight text-balance">{e.title}</h1>
-      {e.summary ? (
-        <p className="mt-4 max-w-prose text-lg leading-relaxed text-(--color-ink-muted) text-pretty">{e.summary}</p>
-      ) : null}
-      <div className="mt-8"><BlockRenderer blocks={e.body} /></div>
+
+      {pattern.body.length > 0 ? (
+        <div className="mt-8"><BlockRenderer blocks={pattern.body} /></div>
+      ) : (
+        <p className="mt-8 rounded-lg border border-dashed border-(--color-border) px-5 py-6 text-sm text-(--color-ink-muted)">
+          No write-up yet — the problems below are filed under this pattern.
+        </p>
+      )}
+
+      {/* The problems */}
+      <section className="mt-12">
+        <h2 className="mb-4 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">
+          Problems ({problems.length})
+        </h2>
+        {problems.length === 0 ? (
+          <p className="text-sm text-(--color-ink-muted)">None filed here yet.</p>
+        ) : (
+          <ul className="divide-y divide-(--color-hairline)">
+            {problems.map((p) => (
+              <li key={p.url} className="flex items-baseline gap-3 py-2.5">
+                {p.important ? <span className="text-amber-500">★</span> : null}
+                <a href={p.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-sm hover:underline">
+                  {p.title}
+                </a>
+                {p.comment ? (
+                  <span className="hidden max-w-xs truncate text-xs text-(--color-ink-muted) sm:inline">{p.comment}</span>
+                ) : null}
+                <span className={cn("text-xs", diffColor[p.difficulty])}>{p.difficulty}</span>
+                {p.myRating ? <span className="font-(family-name:--font-mono) text-xs text-(--color-ink-muted) tabular-nums">{p.myRating}/5</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Connected patterns graph */}
       <MiniAtlas type="train" slug={slug} />
-      <Related items={related} />
     </article>
   );
 }
