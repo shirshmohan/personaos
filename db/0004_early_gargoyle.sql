@@ -1,0 +1,1 @@
+ALTER TABLE "problem" ADD COLUMN "companies" jsonb DEFAULT '[]'::jsonb NOT NULL;

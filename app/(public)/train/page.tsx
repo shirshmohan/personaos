@@ -1,28 +1,36 @@
 import Link from "next/link";
-import { listPatterns } from "@/features/train/public";
+import { listPatterns, getTrainGraph } from "@/features/train/public";
+import { TrainGraphView } from "@/components/public/train-graph";
 import { Reveal } from "@/components/public/reveal";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Train" };
 
 export default async function TrainPage() {
-  const patterns = await listPatterns();
+  const [patterns, graph] = await Promise.all([listPatterns(), getTrainGraph()]);
+
   return (
-    <div className="mx-auto max-w-3xl py-(--spacing-section)">
-      <header className="mb-16">
+    <div className="mx-auto max-w-5xl py-(--spacing-section)">
+      <header className="mb-10">
         <p className="mb-3 font-(family-name:--font-mono) text-xs tracking-widest text-(--color-ink-muted) uppercase">Train</p>
         <h1 className="font-(family-name:--font-display) text-[length:var(--text-title)] leading-tight tracking-tight">Patterns</h1>
         <p className="mt-4 max-w-prose text-sm leading-relaxed text-(--color-ink-muted)">
-          How I actually think about problems — grouped by the pattern that unlocks them, not the problem count.
+          Every problem I've solved, mapped under the pattern that unlocks it.
+          Big nodes are patterns; the dots around them are problems — green easy,
+          amber medium, red hard. Drag to explore, click a problem to open it.
         </p>
       </header>
 
-      {patterns.length === 0 ? (
-        <p className="text-sm text-(--color-ink-muted)">No patterns yet.</p>
-      ) : (
-        <ul className="border-t border-(--color-hairline)">
+      {graph.nodes.length > 0 ? (
+        <div className="mb-12 rounded-2xl border border-(--color-hairline) bg-(--color-surface-sunken)/40">
+          <TrainGraphView graph={graph} height={560} />
+        </div>
+      ) : null}
+
+      {patterns.length > 0 ? (
+        <ul className="mx-auto max-w-3xl border-t border-(--color-hairline)">
           {patterns.map((p, i) => (
-            <Reveal key={p.slug} delay={i * 40}>
+            <Reveal key={p.slug} delay={i * 30}>
               <li className="border-b border-(--color-hairline)">
                 <Link href={`/train/${p.slug}`} className="group flex items-baseline gap-4 py-4">
                   <span className="font-(family-name:--font-display) text-xl tracking-tight transition-transform duration-200 ease-(--ease-quiet) group-hover:translate-x-1">
@@ -36,7 +44,7 @@ export default async function TrainPage() {
             </Reveal>
           ))}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }

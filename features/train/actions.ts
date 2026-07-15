@@ -55,6 +55,7 @@ export interface AddProblemInput {
   myRating?: number | null;
   comment?: string | null;
   patterns: string[];     // pattern names (existing or new)
+  companies?: string[];   // where it was asked (optional, many)
 }
 
 /** Add a solved problem, auto-filled from the catalog (D52). */
@@ -79,6 +80,7 @@ export async function addSolvedProblem(input: AddProblemInput) {
       important: input.important ?? false,
       myRating: input.myRating ?? null,
       comment: input.comment ?? null,
+      companies: input.companies ?? [],
     })
     .onConflictDoNothing({ target: problems.leetcodeSlug })
     .returning({ id: problems.id });

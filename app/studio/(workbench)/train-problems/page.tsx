@@ -36,6 +36,9 @@ export default async function TrainProblemsPage() {
                 {p.patterns.length > 0 ? (
                   <span className="hidden text-xs text-(--color-ink-muted) sm:inline">{p.patterns.join(" · ")}</span>
                 ) : null}
+                {p.companies && p.companies.length > 0 ? (
+                  <span className="hidden text-xs text-(--color-accent) md:inline">{p.companies.join(", ")}</span>
+                ) : null}
                 <span className="text-xs text-(--color-ink-muted)">{p.difficulty}</span>
                 {p.myRating ? <span className="font-(family-name:--font-mono) text-xs text-(--color-ink-muted)">{p.myRating}/5</span> : null}
               </li>

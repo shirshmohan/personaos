@@ -8,7 +8,7 @@ import { GENRES } from "./genres";
  * The Zod validator and the rendered form are BOTH derived from this list, so
  * they cannot drift. Add a field here and it appears in the editor, validated.
  */
-export type FieldKind = "text" | "url" | "date" | "select" | "multiselect";
+export type FieldKind = "text" | "url" | "date" | "select" | "multiselect" | "number";
 
 export interface FieldDef {
   name: string;
@@ -17,6 +17,9 @@ export interface FieldDef {
   required?: boolean;
   options?: readonly string[];
   placeholder?: string;
+  /** Declared for validation but not rendered as a generic input (e.g. lat/lng,
+   *  which the LocationField manages). */
+  hidden?: boolean;
 }
 
 export const ENTITY_FIELDS: Record<EntityType, readonly FieldDef[]> = {
@@ -32,7 +35,12 @@ export const ENTITY_FIELDS: Record<EntityType, readonly FieldDef[]> = {
   ],
   travel: [
     { name: "place", label: "Place", kind: "text", required: true },
+    { name: "city", label: "City / Region", kind: "text" },
     { name: "country", label: "Country", kind: "text", required: true },
+    // lat/lng: set by the LocationField (EXIF or manual), NOT rendered as generic
+    // inputs (hidden: true), but DECLARED so metadata validation preserves them.
+    { name: "lat", label: "Latitude", kind: "number", hidden: true },
+    { name: "lng", label: "Longitude", kind: "number", hidden: true },
   ],
   train: [
     { name: "source", label: "Source", kind: "select", options: ["LeetCode", "Codeforces", "Other"] },
@@ -69,6 +77,13 @@ function zodForFields(fields: readonly FieldDef[]) {
     if (f.kind === "multiselect" && f.options) {
       // A multiselect is an array of allowed values; empty array is fine.
       shape[f.name] = z.array(z.enum(f.options as [string, ...string[]])).default([]);
+      continue;
+    }
+    if (f.kind === "number") {
+      // Optional numeric field (lat/lng). Coerce from the form's string input,
+      // allow empty/undefined. Declared so it SURVIVES metadata validation —
+      // undeclared keys are stripped by z.object.
+      shape[f.name] = z.coerce.number().optional().or(z.literal("")).or(z.null());
       continue;
     }
     if (f.kind === "url") s = z.string().url();

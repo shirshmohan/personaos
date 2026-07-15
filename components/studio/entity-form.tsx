@@ -13,6 +13,7 @@ import { ConfirmButton } from "@/components/shared/confirm-button";
 import { TagCombobox } from "./tag-combobox";
 import { MultiSelect } from "./multi-select";
 import { TechInput } from "./tech-input";
+import { LocationField } from "./location-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -142,7 +143,7 @@ export function EntityForm({ initial, tagVocabulary = [] }: { initial: EntityFor
         </div>
 
         {/* Type-specific fields, rendered from the descriptors. */}
-        {ENTITY_FIELDS[v.type].map((f) => (
+        {ENTITY_FIELDS[v.type].filter((f) => !f.hidden).map((f) => (
           f.kind === "multiselect" ? (
             <div key={f.name} className="sm:col-span-2">
               <Field label={f.label + (f.required ? " *" : "")}>
@@ -190,6 +191,17 @@ export function EntityForm({ initial, tagVocabulary = [] }: { initial: EntityFor
           <TechInput
             value={Array.isArray(v.metadata.tech) ? (v.metadata.tech as string[]) : []}
             onChange={(tech) => set("metadata", { ...v.metadata, tech })}
+          />
+        </div>
+      ) : null}
+
+      {v.type === "travel" ? (
+        <div>
+          <h2 className="mb-3 text-sm font-medium">Location on the globe</h2>
+          <LocationField
+            lat={typeof v.metadata.lat === "number" ? v.metadata.lat : null}
+            lng={typeof v.metadata.lng === "number" ? v.metadata.lng : null}
+            onChange={(lat, lng) => set("metadata", { ...v.metadata, lat, lng })}
           />
         </div>
       ) : null}

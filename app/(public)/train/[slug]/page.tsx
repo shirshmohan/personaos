@@ -56,8 +56,15 @@ export default async function PatternPage({ params }: { params: Promise<{ slug: 
                 <a href={p.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-sm hover:underline">
                   {p.title}
                 </a>
+                {p.companies.length > 0 ? (
+                  <span className="hidden gap-1 sm:flex">
+                    {p.companies.slice(0, 3).map((c) => (
+                      <span key={c} className="rounded border border-(--color-hairline) px-1.5 py-0.5 text-xs text-(--color-ink-muted)">{c}</span>
+                    ))}
+                  </span>
+                ) : null}
                 {p.comment ? (
-                  <span className="hidden max-w-xs truncate text-xs text-(--color-ink-muted) sm:inline">{p.comment}</span>
+                  <span className="hidden max-w-[10rem] truncate text-xs text-(--color-ink-muted) md:inline">{p.comment}</span>
                 ) : null}
                 <span className={cn("text-xs", diffColor[p.difficulty])}>{p.difficulty}</span>
                 {p.myRating ? <span className="font-(family-name:--font-mono) text-xs text-(--color-ink-muted) tabular-nums">{p.myRating}/5</span> : null}

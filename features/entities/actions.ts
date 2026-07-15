@@ -105,6 +105,9 @@ export async function registerMedia(input: {
   format: string;
   bytes: number;
   alt: string;
+  /** From the photo's EXIF, captured before Cloudinary stripped it. */
+  lat?: number | null;
+  lng?: number | null;
 }) {
   await requireOwner();
   const [row] = await db.insert(media).values(input).returning();

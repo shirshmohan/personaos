@@ -5,6 +5,7 @@ import { Search, Star } from "lucide-react";
 import { searchCatalog, addSolvedProblem, type CatalogHit } from "@/features/train/actions";
 import { suggestPatterns } from "@/features/train/patterns";
 import { PatternPicker } from "./pattern-picker";
+import { CompanyPicker } from "./company-picker";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ export function AddProblem() {
   const [important, setImportant] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
+  const [companies, setCompanies] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -34,11 +36,11 @@ export function AddProblem() {
     if (!picked) return;
     start(async () => {
       const res = await addSolvedProblem({
-        slug: picked.slug, important, myRating: rating, comment: comment || null, patterns,
+        slug: picked.slug, important, myRating: rating, comment: comment || null, patterns, companies,
       });
       if (!res.ok) return setMsg(res.error);
       setMsg(`Added "${picked.title}".`);
-      setPicked(null); setQuery(""); setPatterns([]); setImportant(false); setRating(null); setComment("");
+      setPicked(null); setQuery(""); setPatterns([]); setImportant(false); setRating(null); setComment(""); setCompanies([]);
     });
   }
 
@@ -91,6 +93,11 @@ export function AddProblem() {
           <div>
             <label className="mb-2 block text-xs text-(--color-ink-muted)">Pattern(s)</label>
             <PatternPicker value={patterns} suggestions={suggestPatterns(picked.topicTags)} onChange={setPatterns} />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs text-(--color-ink-muted)">Asked at (optional)</label>
+            <CompanyPicker value={companies} onChange={setCompanies} />
           </div>
 
           <div className="flex items-center gap-4">

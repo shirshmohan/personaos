@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { signUpload } from "@/lib/cloudinary/sign";
+import { extractPhotoLocation } from "@/features/entities/exif";
 import { registerMedia } from "@/features/entities/actions";
 import {
   uploadFormData,
@@ -35,6 +36,7 @@ export function MediaUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [located, setLocated] = useState<{ lat: number; lng: number } | null>(null);
   const [alt, setAlt] = useState("");
 
   function handleFile(file: File) {
@@ -47,6 +49,11 @@ export function MediaUpload({
 
     startTransition(async () => {
       try {
+        // Read GPS from the FILE first. Cloudinary strips EXIF on upload, so
+        // this is the only moment the photo's coordinates still exist.
+        const gps = await extractPhotoLocation(file);
+        setLocated(gps);
+
         const signed = await signUpload();
 
         const res = await fetch(uploadUrl(signed.cloudName), {
@@ -71,6 +78,8 @@ export function MediaUpload({
           format: parsed.data.format,
           bytes: parsed.data.bytes,
           alt: alt.trim(),
+          lat: gps?.lat ?? null,
+          lng: gps?.lng ?? null,
         });
 
         onUploaded({ id: row.id, url: row.url, alt: row.alt });
@@ -118,6 +127,12 @@ export function MediaUpload({
       {error ? (
         <p role="alert" className="text-xs text-(--color-ink-muted)">
           {error}
+        </p>
+      ) : null}
+      {located ? (
+        <p className="font-(family-name:--font-mono) text-xs text-(--color-accent)">
+          📍 {located.lat.toFixed(4)}, {located.lng.toFixed(4)} — this photo is
+          on the map.
         </p>
       ) : null}
     </div>

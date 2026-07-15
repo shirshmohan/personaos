@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -103,6 +104,14 @@ export const media = pgTable("media", {
   bytes: integer("bytes").notNull(),
   /** Never optional in the UI. Accessibility is a floor, not a polish step. */
   alt: text("alt").notNull().default(""),
+  /**
+   * GPS from the photo's own EXIF, read CLIENT-SIDE at file-select — the only
+   * moment it exists, because Cloudinary strips EXIF on upload. Every photo
+   * carries its own coordinates, so a trip is many precise pins, not one.
+   * Null when the photo had no geotag (screenshot, edited, downloaded).
+   */
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
@@ -259,6 +268,7 @@ export const problems = pgTable(
     important: boolean("important").notNull().default(false),
     myRating: integer("my_rating"), // your own 1–5 difficulty, optional
     comment: text("comment"),
+    companies: jsonb("companies").$type<string[]>().notNull().default([]),
     solvedAt: timestamp("solved_at", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
