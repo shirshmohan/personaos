@@ -33,6 +33,26 @@ export const blockSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     id: z.string(),
+    type: z.literal("gallery"),
+    /**
+     * Many photos in ONE block — select them all at once instead of building
+     * ten image blocks by hand. Each entry keeps its own mediaId, so each photo
+     * keeps its OWN coordinates on the media row. Grouping them here never
+     * collapses them under the first photo's location.
+     */
+    images: z
+      .array(
+        z.object({
+          mediaId: z.string().nullable(),
+          url: z.string().url(),
+          /** Required, never optional. Accessibility is a floor. */
+          alt: z.string(),
+        }),
+      )
+      .default([]),
+  }),
+  z.object({
+    id: z.string(),
     type: z.literal("video"),
     provider: z.enum(["youtube", "vimeo"]),
     videoId: z.string().min(1),
@@ -53,6 +73,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   quote: "Quote",
   code: "Code",
   image: "Image",
+  gallery: "Gallery (many photos)",
   video: "Video",
   divider: "Divider",
 };
@@ -70,6 +91,8 @@ export function newBlock(type: BlockType): Block {
       return { id, type, language: "text", code: "" };
     case "image":
       return { id, type, mediaId: null, url: "", alt: "" };
+    case "gallery":
+      return { id, type, images: [] };
     case "video":
       return { id, type, provider: "youtube", videoId: "", caption: "" };
     case "divider":
@@ -84,6 +107,7 @@ export function pruneBlocks(blocks: Body): Body {
       return b.text.trim().length > 0;
     if (b.type === "code") return b.code.trim().length > 0;
     if (b.type === "image") return b.url.trim().length > 0;
+    if (b.type === "gallery") return b.images.length > 0;
     if (b.type === "video") return b.videoId.trim().length > 0;
     return true;
   });

@@ -68,6 +68,14 @@ export async function getTravelPhotos(): Promise<TravelPhoto[]> {
         const m = byUrl.get(block.url);
         if (m) candidates.push(m);
       }
+      // A gallery holds many photos, each with its OWN media row — so each one
+      // pins independently rather than inheriting the first photo's location.
+      if (block.type === "gallery") {
+        for (const img of block.images) {
+          const m = img.mediaId ? byId.get(img.mediaId) : byUrl.get(img.url);
+          if (m) candidates.push(m);
+        }
+      }
     }
 
     for (const m of candidates) {

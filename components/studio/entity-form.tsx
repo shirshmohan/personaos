@@ -9,6 +9,7 @@ import { saveEntity, archiveEntity } from "@/features/entities/actions";
 import type { EntityType } from "@/features/entities/types";
 import { BlockEditor } from "./block-editor";
 import { MediaUpload } from "./media-upload";
+import { PhotoLocation } from "./photo-location";
 import { ConfirmButton } from "@/components/shared/confirm-button";
 import { TagCombobox } from "./tag-combobox";
 import { MultiSelect } from "./multi-select";
@@ -235,6 +236,7 @@ export function EntityForm({ initial, tagVocabulary = [] }: { initial: EntityFor
             >
               Remove
             </Button>
+            <PhotoLocation mediaId={v.coverMediaId} />
           </div>
         ) : (
           <MediaUpload

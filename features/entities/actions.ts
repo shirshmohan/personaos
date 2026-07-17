@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { entities, media } from "@/lib/db/schema";
+import { isValidCoords } from "@/features/entities/coords";
 import { requireOwner } from "@/lib/auth/guard";
 import { entityInputSchema, METADATA_SCHEMAS, type EntityInput } from "./schemas";
 import { pruneBlocks } from "./blocks";
@@ -112,4 +113,36 @@ export async function registerMedia(input: {
   await requireOwner();
   const [row] = await db.insert(media).values(input).returning();
   return row;
+}
+
+/**
+ * Set (or clear) a single photo's coordinates by hand. Needed because EXIF is
+ * gone for anything that travelled through WhatsApp, screenshots, downloads, or
+ * editing — without this, those photos could never be pinned at all.
+ */
+export async function setMediaLocation(
+  mediaId: string,
+  coords: { lat: number; lng: number } | null,
+) {
+  await requireOwner();
+  if (coords && !isValidCoords(coords.lat, coords.lng)) {
+    return { ok: false as const, error: "Those coordinates aren't on the planet." };
+  }
+  await db
+    .update(media)
+    .set({ lat: coords?.lat ?? null, lng: coords?.lng ?? null })
+    .where(eq(media.id, mediaId));
+  return { ok: true as const };
+}
+
+/** The current coordinates of a photo, for showing existing pins in the editor. */
+export async function getMediaLocation(mediaId: string) {
+  await requireOwner();
+  const [row] = await db
+    .select({ lat: media.lat, lng: media.lng })
+    .from(media)
+    .where(eq(media.id, mediaId))
+    .limit(1);
+  if (!row || row.lat === null || row.lng === null) return null;
+  return { lat: row.lat, lng: row.lng };
 }

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MediaUpload } from "./media-upload";
+import { PhotoLocation } from "./photo-location";
 import { parseVideoUrl } from "@/features/entities/video";
 
 const ORDER: BlockType[] = ["paragraph", "heading", "quote", "code", "image", "video", "divider"];
@@ -127,6 +128,7 @@ export function BlockEditor({
                     placeholder="Describe this image (required)"
                     onChange={(e) => update(block.id, { alt: e.target.value })}
                   />
+                  <PhotoLocation mediaId={block.mediaId} />
                 </>
               ) : (
                 <MediaUpload
@@ -135,6 +137,71 @@ export function BlockEditor({
                   }
                 />
               )}
+            </div>
+          ) : null}
+
+          {block.type === "gallery" ? (
+            <div className="flex flex-col gap-3">
+              {block.images.length > 0 ? (
+                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {block.images.map((img, i) => (
+                    <li
+                      key={img.mediaId ?? img.url}
+                      className="flex flex-col gap-1.5 rounded-lg border border-(--color-border) p-2"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt={img.alt}
+                        className="aspect-square w-full rounded-md object-cover"
+                      />
+                      <Input
+                        value={img.alt}
+                        placeholder="Describe this photo"
+                        onChange={(e) =>
+                          update(block.id, {
+                            images: block.images.map((x, j) =>
+                              j === i ? { ...x, alt: e.target.value } : x,
+                            ),
+                          })
+                        }
+                      />
+                      {/* Each photo's own pin — never merged with its neighbours. */}
+                      <PhotoLocation mediaId={img.mediaId} />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          update(block.id, {
+                            images: block.images.filter((_, j) => j !== i),
+                          })
+                        }
+                        className="self-start text-xs text-(--color-ink-muted) hover:text-(--color-ink)"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              <MediaUpload
+                multiple
+                label={
+                  block.images.length ? "Add more photos" : "Select photos"
+                }
+                onUploaded={(m) =>
+                  update(block.id, {
+                    images: [
+                      ...block.images,
+                      { mediaId: m.id, url: m.url, alt: m.alt },
+                    ],
+                  })
+                }
+              />
+              <p className="text-xs text-(--color-ink-muted)">
+                Select as many as you like at once. Each photo keeps its own
+                location.
+              </p>
             </div>
           ) : null}
 

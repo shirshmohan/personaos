@@ -75,6 +75,24 @@ export function BlockRenderer({ blocks }: { blocks: Block[] }) {
                 ) : null}
               </figure>
             );
+          case "gallery":
+            return (
+              <figure key={block.id} className="my-2">
+                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {block.images.map((img) => (
+                    <li key={img.mediaId ?? img.url}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt={img.alt}
+                        loading="lazy"
+                        className="aspect-square w-full rounded-lg border border-(--color-hairline) object-cover"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </figure>
+            );
           case "video":
             return (
               <figure key={block.id} className="my-2">
