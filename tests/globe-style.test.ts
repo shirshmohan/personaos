@@ -72,59 +72,58 @@ describe("buildOsmStyle (keyless fallback)", () => {
   });
 });
 
-describe("mergeMapTilerStyle", () => {
+describe("mergeMapTilerStyle — imagery IS the globe now", () => {
   const base = {
     version: 8,
-    sources: { openmaptiles: { type: "vector", url: "https://x/tiles.json" } },
+    sources: { satellite: { type: "raster", url: "https://x/tiles.json" } },
     layers: [
       { id: "bg", type: "background", paint: {} },
+      { id: "imagery", type: "raster", source: "satellite" },
       { id: "roads", type: "line", source: "openmaptiles", minzoom: 8 },
     ],
   } as unknown as StyleSpecification;
 
-  it("keeps MapTiler's layers and adds the stylised sphere on top", () => {
+  it("does NOT paint a stylised sphere over real imagery", () => {
     const s = mergeMapTilerStyle(base, GLOBE_COLORS.dark, land);
     const ids = s.layers.map((l) => l.id);
-    expect(ids.slice(0, 2)).toEqual(["bg", "roads"]);
-    expect(ids.slice(2)).toEqual([
-      "globe-water",
-      "globe-land",
-      "globe-grid",
-      "globe-coast",
-    ]);
+    expect(ids).toEqual(["bg", "imagery", "roads"]);
+    expect(ids.some((id) => id.startsWith("globe-"))).toBe(false);
   });
 
-  it("holds MapTiler's layers back until the descent, so free-tier tiles aren't burned while spinning", () => {
+  it("puts no grid on the planet — Earth has no lines drawn on it", () => {
     const s = mergeMapTilerStyle(base, GLOBE_COLORS.dark, land);
-    for (const l of s.layers) {
-      if (l.id.startsWith("globe-")) continue;
-      expect(l.minzoom).toBeGreaterThanOrEqual(REAL_MINZOOM);
-    }
+    expect(Object.keys(s.sources)).not.toContain("grid");
   });
 
-  it("never lowers a layer's existing minzoom", () => {
+  it("does not hold the imagery back — it has to be there from frame one", () => {
+    // The opposite of the old vector behaviour: withholding tiles until zoom 3
+    // would leave a black hole where the planet should be.
     const s = mergeMapTilerStyle(base, GLOBE_COLORS.dark, land);
-    const roads = s.layers.find((l) => l.id === "roads");
-    expect(roads?.minzoom).toBe(8); // was already higher than REAL_MINZOOM
+    const imagery = s.layers.find((l) => l.id === "imagery");
+    expect(imagery?.minzoom).toBeUndefined();
   });
 
-  it("keeps MapTiler's own sources and adds ours", () => {
+  it("keeps our sky, because MapTiler styles a map and not the void around it", () => {
     const s = mergeMapTilerStyle(base, GLOBE_COLORS.dark, land);
-    expect(Object.keys(s.sources).sort()).toEqual(["grid", "land", "openmaptiles"]);
+    expect(s.sky).toBeDefined();
+    expect(JSON.stringify(s.sky)).toContain(GLOBE_COLORS.dark.space);
   });
 });
 
 describe("maptilerStyleUrl", () => {
-  it("requests the VECTOR style, not raster tiles (raster is a paid feature)", () => {
+  it("asks for hybrid — satellite imagery you can still navigate", () => {
+    expect(maptilerStyleUrl("abc123", true)).toContain("/maps/hybrid/");
+  });
+
+  it("requests a style, never raster tiles directly (raster .png is paid)", () => {
     const url = maptilerStyleUrl("abc123", true);
     expect(url).toContain("style.json");
     expect(url).not.toContain(".png");
     expect(url).toContain("key=abc123");
   });
 
-  it("follows the theme", () => {
-    expect(maptilerStyleUrl("k", true)).toContain("dark");
-    expect(maptilerStyleUrl("k", false)).not.toContain("dark");
+  it("has no dark variant, because a photograph has no dark variant", () => {
+    expect(maptilerStyleUrl("k", true)).toBe(maptilerStyleUrl("k", false));
   });
 });
 

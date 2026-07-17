@@ -9,12 +9,13 @@ import { groupIntoTrips } from "@/features/travel/trips";
 import { THEMES } from "@/features/theme/themes";
 import {
   buildOsmStyle,
-  mergeMapTilerStyle,
+  buildSatelliteStyle,
   maptilerStyleUrl,
   GLOBE_COLORS,
   FADE_START,
   FADE_END,
 } from "@/features/travel/globe-style";
+import { setGlobeCamera } from "@/features/travel/globe-camera";
 
 /**
  * One globe, two personalities.
@@ -95,20 +96,25 @@ export function GlobeMap({
       const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 
       /**
-       * With a key: MapTiler's VECTOR style, with the stylised sphere over it.
-       * Their raster tiles are a paid feature, so requesting .png would 403 on
-       * free. No key, or their API down: OSM. A plain globe beats a blank one.
+       * With a key: MapTiler's `hybrid` — satellite imagery with labels, shown
+       * BARE. Previously we merged our stylised sphere over it and held the
+       * imagery back until z3.5, so from orbit you saw an invented green planet
+       * and never the real one. That is where the green equator came from: our
+       * own lines, drawn across a photograph.
+       *
+       * Without a key, or if the key can't read imagery: the hand-drawn sphere
+       * over OSM. A drawn globe beats a blank one.
        */
       const styleFor = async (isDark: boolean) => {
         const colors = isDark ? GLOBE_COLORS.dark : GLOBE_COLORS.light;
         if (!key) return buildOsmStyle(colors, land);
         try {
           const res = await fetch(maptilerStyleUrl(key, isDark));
-          if (!res.ok) throw new Error(String(res.status));
-          return mergeMapTilerStyle(await res.json(), colors, land);
+          if (res.ok) return buildSatelliteStyle(await res.json(), colors);
         } catch {
-          return buildOsmStyle(colors, land);
+          // network or entitlement — either way, fall back rather than blank
         }
+        return buildOsmStyle(colors, land);
       };
 
       const initial = await styleFor(isDarkTheme());
@@ -129,6 +135,12 @@ export function GlobeMap({
         "top-right",
       );
       map.on("style.load", () => map?.setProjection({ type: "globe" }));
+      // The star field lives outside this component, so it listens rather than
+      // being told. Every frame while spinning — hence a store, not state.
+      map.on("move", () => {
+        if (!map) return;
+        setGlobeCamera({ lng: map.getCenter().lng, bearing: map.getBearing() });
+      });
       map.on("zoom", () => {
         if (!map) return;
         const z = map.getZoom();
@@ -136,6 +148,16 @@ export function GlobeMap({
         const o = cardOpacity(z);
         for (const el of cardEls) el.style.opacity = String(o);
       });
+
+      // The starfield lives outside this component and has to swing the other
+      // way as you turn. Published every frame of movement — deliberately not
+      // through React state, which would re-render the map on every degree.
+      const publish = () => {
+        if (!map) return;
+        setGlobeCamera({ lng: map.getCenter().lng, bearing: map.getBearing() });
+      };
+      map.on("move", publish);
+      publish();
 
       /* ---------------------------------------------------------------- */
       /* Idle rotation                                                     */

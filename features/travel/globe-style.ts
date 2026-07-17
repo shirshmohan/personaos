@@ -206,29 +206,56 @@ export function mergeMapTilerStyle(
   colors: GlobeColors,
   land: GeoJSON.GeoJsonObject,
 ): StyleSpecification {
-  const merged: StyleSpecification = {
+  void land;
+  // No stylised sphere on top, and no graticule. Both existed to give a globe
+  // with no surface something to look like; real imagery makes them scaffolding
+  // over the thing they were standing in for. And the planet has no grid on it.
+  //
+  // Their layers are NOT held back here either — the imagery IS the globe now,
+  // so it has to be there from the first frame.
+  return {
     ...base,
-    // Ours, not theirs — MapTiler styles a map, not the space around a planet.
+    // Space and the atmospheric rim are still ours: MapTiler styles a map, not
+    // the void around a planet.
     sky: skyFor(colors) as never,
-    sources: {
-      ...base.sources,
-      land: { type: "geojson", data: land as never },
-      grid: { type: "geojson", data: graticule() as never },
-    },
-    // Their whole style, held back until the descent, then ours on top fading out.
-    layers: [
-      ...base.layers.map((l) => ({
-        ...l,
-        minzoom: Math.max(l.minzoom ?? 0, REAL_MINZOOM),
-      })),
-      ...stylisedLayers(colors),
-    ],
   };
-  return merged;
 }
 
-/** The style.json to fetch. Vector, and free-tier eligible. */
+/**
+ * The style to fetch.
+ *
+ * "hybrid" is satellite imagery with roads and labels layered on — Google
+ * Earth's trick: photoreal from orbit, navigable on the ground. MapTiler's
+ * satellite lowres (z0–6) is free, which is precisely the orbital range, and
+ * their imagery is cloud-removed and colour-balanced, so the planet reads as
+ * the real thing rather than as a fill colour someone chose.
+ *
+ * Override with NEXT_PUBLIC_MAPTILER_STYLE ("satellite" for imagery with no
+ * labels at all, "streets-v2" for the flat map).
+ */
 export function maptilerStyleUrl(key: string, dark: boolean): string {
-  const mapId = dark ? "streets-v2-dark" : "streets-v2";
+  const mapId = process.env.NEXT_PUBLIC_MAPTILER_STYLE ?? "hybrid";
+  void dark; // imagery is imagery — there is no dark variant of a photograph
   return `https://api.maptiler.com/maps/${mapId}/style.json?key=${key}`;
+}
+
+/**
+ * Imagery, with nothing drawn on top of it.
+ *
+ * The hand-drawn layers — green land fill, coastline, graticule — exist because
+ * a coastline outline holds no information beyond "land here", so without
+ * photographs we had to invent a planet. `mergeMapTilerStyle` layers them OVER
+ * the imagery and holds the imagery back until z3.5, which means from orbit you
+ * see the invention and never the Earth. That is where the green equator comes
+ * from: our lines, drawn across a photograph.
+ *
+ * So this keeps only the sky. No stylised layers, and no minzoom holdback —
+ * imagery IS the globe here, so it has to load at world zoom. That's a handful
+ * of tiles at z0–2, not a quota problem.
+ */
+export function buildSatelliteStyle(
+  base: StyleSpecification,
+  colors: GlobeColors,
+): StyleSpecification {
+  return { ...base, sky: skyFor(colors) as never };
 }

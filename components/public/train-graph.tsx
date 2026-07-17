@@ -6,6 +6,7 @@ import {
   forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation,
 } from "d3-force";
 import type { TrainGraph, TrainNode } from "@/features/train/public";
+import { setGraphFocus, getGraphFocus } from "@/features/train/graph-focus";
 
 interface SimNode extends TrainNode { x: number; y: number; }
 interface SimEdge { source: SimNode; target: SimNode; }
@@ -104,7 +105,15 @@ export function TrainGraphView({ graph, height = 520 }: { graph: TrainGraph; hei
           <g key={n.id} transform={`translate(${n.x},${n.y})`}
             style={{ cursor: "pointer", opacity: active ? 1 : 0.2, transition: "opacity 0.2s" }}
             onPointerDown={(e) => down(n.id, e)}
-            onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)}
+            onMouseEnter={(e) => {
+              setHover(n.id);
+              // Viewport coords: the only frame the backdrop and the SVG agree on.
+              setGraphFocus({ x: e.clientX, y: e.clientY, active: true });
+            }}
+            onMouseLeave={() => {
+              setHover(null);
+              setGraphFocus({ ...getGraphFocus(), active: false });
+            }}
             onClick={() => { if (!n.href) return; isPat ? router.push(n.href) : window.open(n.href, "_blank"); }}>
             {n.important ? <circle r={r + 3} fill="none" stroke="oklch(76% 0.14 85)" strokeWidth={1.5} /> : null}
             <circle r={r} fill={color} stroke="var(--color-surface)" strokeWidth={2} />
