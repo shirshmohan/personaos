@@ -121,3 +121,39 @@
   --color-accent: oklch(74% 0.13 285);
   color-scheme: dark;
 }
+
+/* ---------------------------------------------------------------------------
+ * Globe motion. Transform/opacity only — these run alongside a WebGL canvas,
+ * so anything touching layout would fight the map for frames (D39).
+ * ------------------------------------------------------------------------- */
+
+@keyframes pin-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-accent), 0 0 8px var(--color-accent); }
+  50%      { box-shadow: 0 0 0 5px transparent, 0 0 14px var(--color-accent); }
+}
+
+@keyframes card-float {
+  0%, 100% { transform: translateY(0) rotate(-1.2deg); }
+  50%      { transform: translateY(-5px) rotate(1.2deg); }
+}
+
+@keyframes atmosphere-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+.globe-pin {
+  animation: pin-pulse 2.8s ease-in-out infinite;
+}
+
+.globe-card {
+  animation: card-float 7s ease-in-out infinite;
+}
+
+/* Nothing here is load-bearing — if you've asked for less motion, it all stops. */
+@media (prefers-reduced-motion: reduce) {
+  .globe-pin,
+  .globe-card {
+    animation: none;
+  }
+}

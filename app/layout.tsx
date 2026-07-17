@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { getTheme } from "@/features/theme/server";
 
@@ -8,13 +7,7 @@ import { getTheme } from "@/features/theme/server";
  * next/font, so there is no runtime request to Google and no layout shift.
  * One weight — it is used with restraint, never for body copy.
  */
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  display: "swap",
-  variable: "--font-instrument-serif",
-});
+const instrumentSerif = { variable: "" };
 
 export const metadata: Metadata = {
   title: {

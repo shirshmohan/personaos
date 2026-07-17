@@ -29,12 +29,53 @@ export interface GlobeColors {
   coast: string;
   /** Latitude/longitude grid. */
   grid: string;
+  /** Deep space behind the globe. */
+  space: string;
+  /** The atmospheric rim where space meets air. */
+  horizon: string;
 }
 
 export const GLOBE_COLORS: Record<"dark" | "light", GlobeColors> = {
-  dark: { water: "#0d1420", land: "#182536", coast: "#5b7d9e", grid: "#27384a" },
-  light: { water: "#e8edf2", land: "#f7f9fb", coast: "#64809b", grid: "#b9c6d4" },
+  // Earth, roughly as it actually is: blue ocean, green land. The colour has to
+  // come from the planet — an earlier pass tinted the *space* violet to fight
+  // the dullness, which was treating the symptom. A real Earth against true black
+  // needs no help.
+  dark: {
+    water: "#0d3b5c", // deep ocean
+    land: "#2d5f3f", // landmass green
+    coast: "#7ee0a8", // the lit edge where land meets sea
+    grid: "#1c4a63", // graticule, barely there
+    space: "#02040a", // black. Space is black.
+    horizon: "#4aa3d9", // the atmosphere catching light
+  },
+  light: {
+    water: "#e8edf2", land: "#f7f9fb", coast: "#64809b", grid: "#b9c6d4",
+    space: "#c9d6e4", horizon: "#dbe6f0",
+  },
 };
+
+/**
+ * Space, and the atmosphere catching light at the rim.
+ *
+ * MapLibre renders this natively for globe projection — no shader to hand-write.
+ * atmosphere-blend fades the glow out as you descend: seen from a street, the
+ * sky is not a blue halo around a ball.
+ */
+export function skyFor(colors: GlobeColors): unknown {
+  return {
+    "sky-color": colors.space,
+    "horizon-color": colors.horizon,
+    "fog-color": colors.water,
+    "atmosphere-blend": [
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      0, 1,
+      FADE_START, 0.6,
+      FADE_END + 1, 0,
+    ],
+  };
+}
 
 /** Where the stylised sphere hands over to the real map. */
 export const FADE_START = 3.5;
@@ -122,6 +163,7 @@ export function buildOsmStyle(
 ): StyleSpecification {
   return {
     version: 8,
+    sky: skyFor(colors) as never,
     sources: {
       land: { type: "geojson", data: land as never },
       grid: { type: "geojson", data: graticule() as never },
@@ -166,6 +208,8 @@ export function mergeMapTilerStyle(
 ): StyleSpecification {
   const merged: StyleSpecification = {
     ...base,
+    // Ours, not theirs — MapTiler styles a map, not the space around a planet.
+    sky: skyFor(colors) as never,
     sources: {
       ...base.sources,
       land: { type: "geojson", data: land as never },

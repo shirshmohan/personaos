@@ -10,7 +10,7 @@ export default async function PublicLayout({
   const theme = await getTheme();
   return (
     <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-(--spacing-gutter)">
-      <header className="flex items-center justify-between py-6">
+      <header className="relative z-20 flex items-center justify-between py-6">
         <Link
           href="/"
           className="font-(family-name:--font-display) text-lg tracking-tight"
@@ -41,9 +41,9 @@ export default async function PublicLayout({
         </div>
       </header>
 
-      <main className="flex-1"><PageTransition>{children}</PageTransition></main>
+      <main className="relative z-10 flex-1"><PageTransition>{children}</PageTransition></main>
 
-      <footer className="mt-24 flex items-center justify-between border-t border-(--color-hairline) py-8 font-(family-name:--font-mono) text-xs text-(--color-ink-muted)">
+      <footer className="relative z-20 mt-24 flex items-center justify-between border-t border-(--color-hairline) py-8 font-(family-name:--font-mono) text-xs text-(--color-ink-muted)">
         <span>Persona OS</span>
         <span>Designed &amp; engineered by its subject</span>
       </footer>
